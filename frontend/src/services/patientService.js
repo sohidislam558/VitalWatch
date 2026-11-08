@@ -30,5 +30,10 @@ export const patientService = {
     const response = await api.get(`/patients/${id}/vitals`, { params });
     return response.data;
   },
+
+  async deletePatient(id) {
+    const response = await api.delete(`/patients/${id}`);
+    return response.data;
+  },
 };
 

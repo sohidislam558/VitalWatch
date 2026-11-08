@@ -60,8 +60,8 @@
             </p>
         </div>
         <div class="footer">
-            <p>DEMONSTRATION ONLY — NOT CLINICALLY VALIDATED.</p>
-            <p>VitalWatch Academic Prototype. Do not reply to this automated email.</p>
+            <p>VitalWatch Patient Early Warning Notification &bull; Confidential Hospital Communication</p>
+            <p>Do not reply to this automated email.</p>
         </div>
     </div>
 </body>

@@ -29,19 +29,21 @@ export default function Topbar({ onMenuClick }) {
       </div>
 
       <div className="flex items-center gap-4">
-        {/* Alerts quick badge link */}
-        <Link
-          to="/alerts"
-          className="relative p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors"
-          title="Active Alerts"
-        >
-          <Bell className="w-5 h-5" />
-          {unreadAlertCount > 0 && (
-            <span className="absolute top-1 right-1 w-4 h-4 bg-red-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
-              {unreadAlertCount}
-            </span>
-          )}
-        </Link>
+        {/* Alerts quick badge link (Doctor and Nurse only) */}
+        {user?.role !== 'admin' && (
+          <Link
+            to="/alerts"
+            className="relative p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors"
+            title="Active Alerts"
+          >
+            <Bell className="w-5 h-5" />
+            {unreadAlertCount > 0 && (
+              <span className="absolute top-1 right-1 w-4 h-4 bg-red-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
+                {unreadAlertCount}
+              </span>
+            )}
+          </Link>
+        )}
 
         {/* User Menu */}
         <div className="relative">

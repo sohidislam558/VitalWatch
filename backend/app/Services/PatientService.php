@@ -3,8 +3,11 @@
 namespace App\Services;
 
 use App\Models\Admission;
+use App\Models\Alert;
+use App\Models\AlertAcknowledgement;
 use App\Models\Patient;
 use App\Models\User;
+use App\Models\VitalRecord;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -143,6 +146,46 @@ class PatientService
             'vitalRecords' => fn($q) => $q->with('recorder')->orderBy('measured_at', 'desc')->take(30),
             'alerts' => fn($q) => $q->with(['alertRule', 'acknowledgements.user'])->orderBy('created_at', 'desc')->take(20),
         ])->findOrFail($id);
+    }
+
+    /**
+     * Delete a patient and cascade delete all their clinical records (admissions, vitals, alerts).
+     * Admin only.
+     */
+    public function delete(Patient $patient, User $actor, string $ip): void
+    {
+        DB::transaction(function () use ($patient, $actor, $ip) {
+            $patientId = $patient->id;
+            $patientCode = $patient->patient_code;
+            $patientName = $patient->name;
+
+            // Delete alerts and acknowledgements
+            $alertIds = Alert::where('patient_id', $patientId)->pluck('id');
+            AlertAcknowledgement::whereIn('alert_id', $alertIds)->delete();
+            Alert::where('patient_id', $patientId)->delete();
+
+            // Delete vital records
+            VitalRecord::where('patient_id', $patientId)->delete();
+
+            // Delete admissions
+            Admission::where('patient_id', $patientId)->delete();
+
+            // Delete the patient record
+            $patient->delete();
+
+            $this->auditService->log(
+                action: 'PATIENT_DELETED',
+                entityType: Patient::class,
+                entityId: $patientId,
+                details: [
+                    'patient_code' => $patientCode,
+                    'patient_name' => $patientName,
+                    'deleted_by' => $actor->name,
+                ],
+                user: $actor,
+                ipAddress: $ip
+            );
+        });
     }
 }
 

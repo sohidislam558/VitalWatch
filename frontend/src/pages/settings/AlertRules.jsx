@@ -118,15 +118,6 @@ export default function AlertRules() {
         }
       />
 
-      {/* Safety Notice Banner */}
-      <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3 text-xs text-amber-900">
-        <ShieldAlert className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-        <div className="leading-relaxed">
-          <strong>CLINICAL SAFETY DIRECTIVE:</strong> DEMONSTRATION ONLY — NOT CLINICALLY VALIDATED.
-          Thresholds configured here are academic demonstration parameters. In an actual medical setting, alert rules must be formally established and verified by clinical governance protocols before deployment.
-        </div>
-      </div>
-
       {loading ? (
         <LoadingSpinner text="Retrieving configured alert engine rules..." />
       ) : (

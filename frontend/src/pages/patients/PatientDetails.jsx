@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { patientService } from '../../services/patientService';
 import { admissionService } from '../../services/admissionService';
 import { reportService } from '../../services/reportService';
 import { useAuth } from '../../hooks/useAuth';
-import { canRecordVitals, canDischargePatient, canAdmitPatient } from '../../utils/permissions';
+import { canRecordVitals, canDischargePatient, canAdmitPatient, canDeletePatient } from '../../utils/permissions';
 import PageContainer from '../../components/layout/PageContainer';
 import PageHeader from '../../components/common/PageHeader';
 import PatientDetailsCard from '../../components/patients/PatientDetailsCard';
@@ -16,7 +16,7 @@ import Modal from '../../components/common/Modal';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import Button from '../../components/common/Button';
-import { PlusCircle, FileText, Download, Bed, History, AlertTriangle } from 'lucide-react';
+import { PlusCircle, FileText, Download, Bed, History, AlertTriangle, Trash2 } from 'lucide-react';
 import { formatDateTime } from '../../utils/formatDate';
 import StatusBadge from '../../components/common/StatusBadge';
 import toast from 'react-hot-toast';
@@ -24,6 +24,7 @@ import toast from 'react-hot-toast';
 export default function PatientDetails() {
   const { id } = useParams();
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const [patient, setPatient] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -33,6 +34,8 @@ export default function PatientDetails() {
   const [admitModalOpen, setAdmitModalOpen] = useState(false);
   const [dischargeTarget, setDischargeTarget] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Active view tab
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'charts' | 'vitals' | 'admissions' | 'alerts'
@@ -94,6 +97,18 @@ export default function PatientDetails() {
     }
   };
 
+  const handleDeletePatient = async () => {
+    setDeleteLoading(true);
+    try {
+      await patientService.deletePatient(id);
+      toast.success(`Patient ${patient.patient_code} (${patient.name}) deleted successfully.`);
+      navigate('/patients');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete patient record.');
+      setDeleteLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <PageContainer>
@@ -140,6 +155,17 @@ export default function PatientDetails() {
             >
               Export PDF
             </Button>
+
+            {canDeletePatient(user) && (
+              <Button
+                size="sm"
+                variant="danger"
+                icon={Trash2}
+                onClick={() => setDeleteConfirmOpen(true)}
+              >
+                Delete Patient
+              </Button>
+            )}
           </div>
         }
       />
@@ -313,6 +339,21 @@ export default function PatientDetails() {
         confirmText="Confirm Discharge"
         variant="danger"
         loading={actionLoading}
+      />
+
+      {/* Admin Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        onCancel={() => setDeleteConfirmOpen(false)}
+        onConfirm={handleDeletePatient}
+        title="Permanently Delete Patient Record"
+        message={`Are you sure you want to permanently delete patient ${patient.name} (${patient.patient_code}) and all associated admissions, vital signs, and alerts? This action is permanent and cannot be undone.`}
+        confirmText="Delete Patient"
+        confirmLabel="Delete Patient"
+        variant="danger"
+        confirmVariant="danger"
+        loading={deleteLoading}
       />
     </PageContainer>
   );

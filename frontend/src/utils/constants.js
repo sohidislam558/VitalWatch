@@ -22,14 +22,14 @@ export const VITAL_BOUNDS = {
 };
 
 export const WARDS = [
+  'Cardiology ICU',
   'Intensive Care Unit (ICU)',
-  'Cardiology Ward',
-  'Respiratory Ward',
-  'General Ward 3A',
-  'General Ward 2B',
-  'Neurology Ward',
-  'Pediatrics Ward',
   'Emergency Department',
+  'General Medical Ward',
+  'Surgical Recovery',
+  'Telemetry Observation',
+  'Pediatric Ward',
+  'Respiratory Care Unit',
 ];
 
 export const ALERT_PRIORITIES = {

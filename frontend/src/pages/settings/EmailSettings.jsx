@@ -46,7 +46,7 @@ export default function EmailSettings() {
               </h4>
               <ul className="list-disc pl-5 space-y-1 text-slate-600">
                 <li>
-                  <strong>Mailtrap:</strong> Free online fake SMTP sandbox for academic testing. Update <code className="bg-slate-100 px-1 rounded font-mono">MAIL_HOST=sandbox.smtp.mailtrap.io</code> in <code className="bg-slate-100 px-1 rounded font-mono">backend/.env</code>.
+                  <strong>Mailtrap:</strong> Free online fake SMTP sandbox for testing. Update <code className="bg-slate-100 px-1 rounded font-mono">MAIL_HOST=sandbox.smtp.mailtrap.io</code> in <code className="bg-slate-100 px-1 rounded font-mono">backend/.env</code>.
                 </li>
                 <li>
                   <strong>Mailpit / MailHog:</strong> Lightweight local fake email capture server running on port 1025.

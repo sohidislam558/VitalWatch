@@ -18,7 +18,7 @@ export default function AdmissionForm({
   } = useForm({
     defaultValues: {
       patient_id: defaultPatientId || '',
-      ward: 'Intensive Care Unit (ICU)',
+      ward: 'Cardiology ICU',
       bed_number: '',
       admitted_at: new Date().toISOString().slice(0, 16),
     },

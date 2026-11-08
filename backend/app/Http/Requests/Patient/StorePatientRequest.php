@@ -8,7 +8,7 @@ class StorePatientRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return in_array($this->user()?->role, ['admin', 'nurse'], true);
+        return $this->user()?->role === 'nurse';
     }
 
     public function rules(): array

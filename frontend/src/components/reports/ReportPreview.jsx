@@ -173,14 +173,6 @@ export default function ReportPreview({
             </div>
           )}
         </div>
-
-        {/* Clinical Disclaimer */}
-        <div className="mt-8 pt-4 border-t border-slate-200 flex items-start gap-3 bg-slate-50 p-3 rounded text-[11px] text-slate-600">
-          <ShieldCheck className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5" />
-          <p>
-            <strong>CLINICAL SAFETY NOTICE:</strong> DEMONSTRATION ONLY — NOT CLINICALLY VALIDATED. VitalWatch is an academic software decision-support prototype. It does not replace independent human clinical judgment or treatment guidelines.
-          </p>
-        </div>
       </div>
     </div>
   );

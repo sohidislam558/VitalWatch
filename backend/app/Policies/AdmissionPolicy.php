@@ -19,12 +19,14 @@ class AdmissionPolicy
 
     public function create(User $user): bool
     {
-        return in_array($user->role, ['admin', 'nurse'], true);
+        // Only nurses can admit patients
+        return $user->role === 'nurse';
     }
 
     public function discharge(User $user, Admission $admission): bool
     {
-        return in_array($user->role, ['admin', 'doctor'], true);
+        // Only doctors can formally discharge an admitted patient
+        return $user->role === 'doctor' && $admission->status === 'admitted';
     }
 }
 

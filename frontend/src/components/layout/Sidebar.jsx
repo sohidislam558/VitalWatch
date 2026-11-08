@@ -3,17 +3,14 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
-  Bed,
   Activity,
   AlertTriangle,
   FileText,
   UserCheck,
   Sliders,
-  ShieldAlert,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotification } from '../../context/NotificationContext';
-import { canManageUsers, canManageAlertRules, canRecordVitals } from '../../utils/permissions';
 
 export default function Sidebar({ onClose }) {
   const { user } = useAuth();
@@ -46,19 +43,10 @@ export default function Sidebar({ onClose }) {
       { to: '/reports', label: 'Clinical Reports', icon: FileText },
     ];
   } else {
-    // Admin (Full Hospital Access)
+    // Admin (Simplified Governance & Monitoring Feed)
     links = [
-      { to: '/dashboard', label: 'Hospital Overview', icon: LayoutDashboard },
+      { to: '/dashboard', label: 'Admin Activity Feed', icon: LayoutDashboard },
       { to: '/patients', label: 'Patient Directory', icon: Users },
-      { to: '/admissions', label: 'Ward Admissions', icon: Bed },
-      { to: '/vitals/add', label: 'Record Vital Signs', icon: Activity },
-      { to: '/vitals/history', label: 'Vital Trend Logs', icon: Activity },
-      {
-        to: '/alerts',
-        label: 'Early Warning Alerts',
-        icon: AlertTriangle,
-        badge: unreadAlertCount > 0 ? unreadAlertCount : null,
-      },
       { to: '/reports', label: 'Clinical Reports', icon: FileText },
       { to: '/users', label: 'Staff Accounts', icon: UserCheck },
       { to: '/settings/rules', label: 'Alert Threshold Rules', icon: Sliders },
@@ -113,14 +101,6 @@ export default function Sidebar({ onClose }) {
         })}
       </nav>
 
-      {/* Notice Banner */}
-      <div className="p-3 mx-3 mb-3 rounded-md bg-slate-800/60 border border-slate-700/50 text-[11px] text-slate-400 flex items-start gap-2">
-        <ShieldAlert className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-        <p className="leading-tight text-[10px]">
-          Academic prototype. Demonstration thresholds only.
-        </p>
-      </div>
-
       {/* User Info Footer */}
       <div className="p-4 border-t border-slate-800 bg-slate-950/40">
         <div className="flex items-center gap-3">
@@ -136,4 +116,3 @@ export default function Sidebar({ onClose }) {
     </div>
   );
 }
-

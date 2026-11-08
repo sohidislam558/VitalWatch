@@ -29,6 +29,7 @@ import Textarea from '../common/Textarea';
 import Modal from '../common/Modal';
 import LoadingSpinner from '../common/LoadingSpinner';
 import EmptyState from '../common/EmptyState';
+import { WARDS } from '../../utils/constants';
 import toast from 'react-hot-toast';
 
 export default function SituationMonitor({
@@ -66,9 +67,9 @@ export default function SituationMonitor({
   });
   const [vitalSubmitting, setVitalSubmitting] = useState(false);
 
-  // Derive unique wards
+  // Derive unique wards from constants and currently admitted patients
   const availableWards = Array.from(
-    new Set(patients.map((p) => p.active_admission?.ward).filter(Boolean))
+    new Set([...WARDS, ...patients.map((p) => p.active_admission?.ward).filter(Boolean)])
   );
 
   // Filter patients
@@ -98,8 +99,8 @@ export default function SituationMonitor({
   const isDoctor = user?.role === 'doctor';
   const isNurse = user?.role === 'nurse';
   const isAdmin = user?.role === 'admin';
-  const canInputVitals = isNurse || isAdmin;
-  const canTakeDoctorAction = isDoctor || isAdmin;
+  const canInputVitals = isNurse;
+  const canTakeDoctorAction = isDoctor;
 
   // Check if this doctor is ALREADY attending a patient (single-patient concurrency)
   const myAttendingAlert = patients
@@ -558,13 +559,15 @@ export default function SituationMonitor({
                       <Eye className="w-3.5 h-3.5" />
                       <span>Chart Details</span>
                     </Link>
-                    <Link
-                      to={`/vitals/history?patient_id=${patient.id}`}
-                      className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 transition-colors"
-                    >
-                      <TrendingUp className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Trends</span>
-                    </Link>
+                    {(isNurse || isDoctor) && (
+                      <Link
+                        to={`/vitals/history?patient_id=${patient.id}`}
+                        className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 transition-colors"
+                      >
+                        <TrendingUp className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Trends</span>
+                      </Link>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2">

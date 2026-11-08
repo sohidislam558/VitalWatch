@@ -1,16 +1,21 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import StatusBadge from '../common/StatusBadge';
-import { calculateAge, formatDate } from '../../utils/formatDate';
-import { Eye, Edit, Bed, Activity } from 'lucide-react';
+import { calculateAge } from '../../utils/formatDate';
+import { Eye, Edit, Bed, Activity, Trash2 } from 'lucide-react';
 import LoadingSpinner from '../common/LoadingSpinner';
 import EmptyState from '../common/EmptyState';
+import { useAuth } from '../../hooks/useAuth';
+import { canDeletePatient, canRecordVitals, canAdmitPatient } from '../../utils/permissions';
 
 export default function PatientTable({
   patients = [],
   loading = false,
   onAdmit,
+  onDelete,
 }) {
+  const { user } = useAuth();
+
   if (loading) {
     return <LoadingSpinner text="Loading patient registry..." />;
   }
@@ -67,7 +72,7 @@ export default function PatientTable({
                     <div className="flex items-center justify-end gap-1.5">
                       <Link
                         to={`/patients/${p.id}`}
-                        className="p-1 text-slate-500 hover:text-blue-600 rounded transition-colors"
+                        className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded transition-colors"
                         title="View Full Profile"
                       >
                         <Eye className="w-4 h-4" />
@@ -75,30 +80,46 @@ export default function PatientTable({
 
                       <Link
                         to={`/patients/${p.id}/edit`}
-                        className="p-1 text-slate-500 hover:text-amber-600 rounded transition-colors"
+                        className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-slate-100 rounded transition-colors"
                         title="Edit Demographics"
                       >
                         <Edit className="w-4 h-4" />
                       </Link>
 
-                      {activeAdm ? (
+                      {/* Nurse Only: Record Vitals */}
+                      {activeAdm && canRecordVitals(user) && (
                         <Link
                           to={`/vitals/add?patient_id=${p.id}`}
-                          className="p-1 text-slate-500 hover:text-emerald-600 rounded transition-colors"
+                          className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-slate-100 rounded transition-colors"
                           title="Record Vitals"
                         >
                           <Activity className="w-4 h-4" />
                         </Link>
-                      ) : onAdmit ? (
+                      )}
+
+                      {/* Nurse Only: Admit to Ward */}
+                      {!activeAdm && canAdmitPatient(user) && onAdmit && (
                         <button
                           type="button"
                           onClick={() => onAdmit(p)}
-                          className="p-1 text-slate-500 hover:text-blue-600 rounded transition-colors"
+                          className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded transition-colors"
                           title="Admit to Ward"
                         >
                           <Bed className="w-4 h-4" />
                         </button>
-                      ) : null}
+                      )}
+
+                      {/* Admin Only: Delete Patient Entry */}
+                      {canDeletePatient(user) && onDelete && (
+                        <button
+                          type="button"
+                          onClick={() => onDelete(p)}
+                          className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                          title="Delete Patient Record"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -110,4 +131,3 @@ export default function PatientTable({
     </div>
   );
 }
-

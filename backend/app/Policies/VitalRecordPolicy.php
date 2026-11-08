@@ -19,7 +19,8 @@ class VitalRecordPolicy
 
     public function create(User $user): bool
     {
-        return in_array($user->role, ['admin', 'nurse'], true);
+        // Only bedside nurses can record vital signs
+        return $user->role === 'nurse';
     }
 
     /**

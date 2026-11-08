@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../../hooks/useAuth';
-import { Activity, Lock, Mail, Eye, EyeOff, ShieldAlert } from 'lucide-react';
+import { Activity, Lock, Mail, Eye, EyeOff } from 'lucide-react';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import toast from 'react-hot-toast';
@@ -123,14 +123,6 @@ export default function Login() {
               Register with Hospital Badge
             </Link>
           </div>
-        </div>
-
-        {/* Safety Disclaimer */}
-        <div className="mt-5 flex items-start gap-2.5 px-4 py-3 bg-slate-800/60 border border-slate-700/60 rounded-lg text-slate-400 text-xs">
-          <ShieldAlert className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-          <p className="text-[11px] leading-relaxed">
-            VitalWatch is an academic software prototype for healthcare monitoring and early warning assistance.
-          </p>
         </div>
       </div>
     </div>

@@ -5,27 +5,36 @@ export function canManageUsers(user) {
 }
 
 export function canRegisterPatient(user) {
-  return user?.role === ROLES.ADMIN || user?.role === ROLES.NURSE;
+  // Only registered nurses can register patients
+  return user?.role === ROLES.NURSE;
 }
 
 export function canAdmitPatient(user) {
-  return user?.role === ROLES.ADMIN || user?.role === ROLES.NURSE;
+  // Only nurses can admit patients to a ward
+  return user?.role === ROLES.NURSE;
 }
 
 export function canDischargePatient(user) {
-  return user?.role === ROLES.ADMIN || user?.role === ROLES.DOCTOR;
+  // Only doctors can formally discharge patients
+  return user?.role === ROLES.DOCTOR;
 }
 
 export function canRecordVitals(user) {
-  return user?.role === ROLES.ADMIN || user?.role === ROLES.NURSE;
+  // Only bedside nurses can record vital signs observations
+  return user?.role === ROLES.NURSE;
+}
+
+export function canDeletePatient(user) {
+  // Only administrators can delete patient records
+  return user?.role === ROLES.ADMIN;
 }
 
 export function canAcknowledgeAlerts(user) {
-  return [ROLES.ADMIN, ROLES.DOCTOR, ROLES.NURSE].includes(user?.role);
+  return [ROLES.DOCTOR, ROLES.NURSE].includes(user?.role);
 }
 
 export function canResolveAlerts(user) {
-  return [ROLES.ADMIN, ROLES.DOCTOR].includes(user?.role);
+  return user?.role === ROLES.DOCTOR;
 }
 
 export function canManageAlertRules(user) {
@@ -35,4 +44,3 @@ export function canManageAlertRules(user) {
 export function canViewAuditLogs(user) {
   return user?.role === ROLES.ADMIN;
 }
-

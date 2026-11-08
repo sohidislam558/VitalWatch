@@ -248,9 +248,7 @@
         </table>
     @endif
 
-    <div class="disclaimer">
-        <strong>CLINICAL NOTICE:</strong> DEMONSTRATION ONLY — NOT CLINICALLY VALIDATED. VitalWatch is an academic software prototype for patient data organization and early warning notification. It does not provide medical diagnosis, dosage calculations, or clinical prognosis.
-    </div>
+
 
     <div class="footer">
         VitalWatch Hospital Information System &bull; Confidential Patient Healthcare Record &bull; Page 1 of 1

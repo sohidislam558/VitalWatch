@@ -16,22 +16,33 @@ class AdmissionTest extends TestCase
         $response = $this->withHeaders($this->getAuthHeader('nurse'))
             ->postJson('/api/admissions', [
                 'patient_id' => $patient->id,
-                'ward' => 'General Ward 4B',
-                'bed_number' => '4B-10',
+                'ward' => 'Cardiology ICU',
+                'bed_number' => 'Bed 102',
             ]);
 
         $response->assertStatus(422)
             ->assertJsonValidationErrors(['patient_id']);
     }
 
-    public function test_admin_can_discharge_admission(): void
+    public function test_doctor_can_discharge_and_admin_cannot(): void
     {
         [$patient, $admission] = $this->createTestPatient();
 
-        $response = $this->withHeaders($this->getAuthHeader('admin'))
-            ->patchJson("/api/admissions/{$admission->id}/discharge");
+        // 1. Admin attempt must be strictly FORBIDDEN (403)
+        $adminAttempt = $this->withHeaders($this->getAuthHeader('admin'))
+            ->patchJson("/api/admissions/{$admission->id}/discharge", [
+                'discharge_summary' => 'Admin discharge attempt',
+            ]);
+        $adminAttempt->assertStatus(403);
 
-        $response->assertStatus(200)
+        // 2. Doctor can discharge successfully (200)
+        auth()->forgetGuards();
+        $doctorResponse = $this->withHeaders($this->getAuthHeader('doctor'))
+            ->patchJson("/api/admissions/{$admission->id}/discharge", [
+                'discharge_summary' => 'Patient fully evaluated and cleared for discharge by attending physician.',
+            ]);
+
+        $doctorResponse->assertStatus(200)
             ->assertJson([
                 'success' => true,
                 'data' => [
@@ -42,4 +53,3 @@ class AdmissionTest extends TestCase
         $this->assertEquals('discharged', $admission->fresh()->status);
     }
 }
-

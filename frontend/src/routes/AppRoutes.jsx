@@ -82,7 +82,7 @@ export default function AppRoutes() {
         <Route
           path="patients/add"
           element={
-            <RoleRoute allowedRoles={['admin', 'nurse']}>
+            <RoleRoute allowedRoles={['nurse']}>
               <AddPatient />
             </RoleRoute>
           }
@@ -97,32 +97,67 @@ export default function AppRoutes() {
           }
         />
 
-        {/* Admissions */}
-        <Route path="admissions" element={<Admissions />} />
+        {/* Admissions (Clinical roles only) */}
+        <Route
+          path="admissions"
+          element={
+            <RoleRoute allowedRoles={['doctor', 'nurse']}>
+              <Admissions />
+            </RoleRoute>
+          }
+        />
         <Route
           path="admissions/add"
           element={
-            <RoleRoute allowedRoles={['admin', 'nurse']}>
+            <RoleRoute allowedRoles={['nurse']}>
               <AddAdmission />
             </RoleRoute>
           }
         />
-        <Route path="admissions/:id" element={<AdmissionDetails />} />
+        <Route
+          path="admissions/:id"
+          element={
+            <RoleRoute allowedRoles={['doctor', 'nurse']}>
+              <AdmissionDetails />
+            </RoleRoute>
+          }
+        />
 
-        {/* Vital Signs */}
+        {/* Vital Signs (Clinical roles only) */}
         <Route
           path="vitals/add"
           element={
-            <RoleRoute allowedRoles={['admin', 'nurse']}>
+            <RoleRoute allowedRoles={['nurse']}>
               <AddVitals />
             </RoleRoute>
           }
         />
-        <Route path="vitals/history" element={<VitalHistory />} />
+        <Route
+          path="vitals/history"
+          element={
+            <RoleRoute allowedRoles={['doctor', 'nurse']}>
+              <VitalHistory />
+            </RoleRoute>
+          }
+        />
 
-        {/* Early Warning Alerts */}
-        <Route path="alerts" element={<Alerts />} />
-        <Route path="alerts/:id" element={<AlertDetails />} />
+        {/* Early Warning Alerts (Clinical roles only) */}
+        <Route
+          path="alerts"
+          element={
+            <RoleRoute allowedRoles={['doctor', 'nurse']}>
+              <Alerts />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="alerts/:id"
+          element={
+            <RoleRoute allowedRoles={['doctor', 'nurse']}>
+              <AlertDetails />
+            </RoleRoute>
+          }
+        />
 
         {/* Reports */}
         <Route path="reports" element={<Reports />} />

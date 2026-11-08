@@ -10,6 +10,7 @@ import PageHeader from '../../components/common/PageHeader';
 import PatientTable from '../../components/patients/PatientTable';
 import AdmissionForm from '../../components/patients/AdmissionForm';
 import Modal from '../../components/common/Modal';
+import ConfirmDialog from '../../components/common/ConfirmDialog';
 import SearchInput from '../../components/common/SearchInput';
 import WardFilter from '../../components/dashboard/WardFilter';
 import Pagination from '../../components/common/Pagination';
@@ -31,6 +32,10 @@ export default function Patients() {
   // Quick Admission modal
   const [admitPatientTarget, setAdmitPatientTarget] = useState(null);
   const [admitLoading, setAdmitLoading] = useState(false);
+
+  // Admin Delete modal
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const fetchPatients = useCallback(async () => {
     setLoading(true);
@@ -67,6 +72,21 @@ export default function Patients() {
       toast.error(msg);
     } finally {
       setAdmitLoading(false);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await patientService.deletePatient(deleteTarget.id);
+      toast.success(`Patient ${deleteTarget.patient_code} (${deleteTarget.name}) deleted successfully.`);
+      setDeleteTarget(null);
+      fetchPatients();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete patient record.');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -124,6 +144,7 @@ export default function Patients() {
         patients={patients}
         loading={loading}
         onAdmit={canAdmitPatient(user) ? (p) => setAdmitPatientTarget(p) : null}
+        onDelete={(p) => setDeleteTarget(p)}
       />
 
       <Pagination
@@ -132,6 +153,18 @@ export default function Patients() {
         totalItems={totalItems}
         perPage={perPage}
         onPageChange={setPage}
+      />
+
+      {/* Admin Delete Confirmation Modal */}
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        title="Permanently Delete Patient Record"
+        message={`Are you sure you want to permanently delete patient ${deleteTarget?.name} (${deleteTarget?.patient_code}) and all associated admissions, vital signs, and alerts? This action is irreversible.`}
+        confirmLabel="Delete Patient"
+        confirmVariant="danger"
+        loading={deleteLoading}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteTarget(null)}
       />
 
       {/* Quick Admit Modal */}

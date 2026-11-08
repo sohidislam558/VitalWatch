@@ -160,7 +160,7 @@ export default function AdminPortal() {
             </div>
             <div>
               <div className="text-xs font-bold text-slate-900">Patient Directory</div>
-              <div className="text-[10px] text-slate-500">Admissions & Wards</div>
+              <div className="text-[10px] text-slate-500">Manage Patients & Records</div>
             </div>
           </Link>
 

@@ -266,28 +266,10 @@
                 </div>
             </div>
 
-            <!-- Demonstration Credentials -->
-            <div class="creds-box">
-                <div class="creds-title">Default Demonstration Login Accounts (Password: <code>password</code>)</div>
-                <div class="creds-grid">
-                    <div class="cred-item">
-                        <div class="cred-role">Administrator</div>
-                        <div class="cred-email">admin@vitalwatch.hospital</div>
-                    </div>
-                    <div class="cred-item">
-                        <div class="cred-role">Attending Physician (Doctor)</div>
-                        <div class="cred-email">doctor.sarah@vitalwatch.hospital</div>
-                    </div>
-                    <div class="cred-item">
-                        <div class="cred-role">Floor / Ward Nurse</div>
-                        <div class="cred-email">nurse.john@vitalwatch.hospital</div>
-                    </div>
-                </div>
-            </div>
         </div>
 
         <div class="footer">
-            <span>VitalWatch Academic Software Prototype &bull; DEMONSTRATION ONLY</span>
+            <span>VitalWatch Hospital Patient Monitoring & Early Warning System</span>
             <span>REST Endpoints: <a href="/api/dashboard/summary">/api/dashboard/summary</a> | <a href="/api/alert-rules">/api/alert-rules</a></span>
         </div>
     </div>

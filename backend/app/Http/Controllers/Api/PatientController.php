@@ -108,5 +108,21 @@ class PatientController extends Controller
             'data' => $admissions,
         ]);
     }
+
+    /**
+     * Delete patient record and cascade all child data (Admin only).
+     */
+    public function destroy(Request $request, int $id): JsonResponse
+    {
+        $patient = Patient::findOrFail($id);
+        $this->authorize('delete', $patient);
+
+        $this->patientService->delete($patient, $request->user(), $request->ip());
+
+        return response()->json([
+            'success' => true,
+            'message' => "Patient {$patient->patient_code} ({$patient->name}) and all associated records deleted successfully.",
+        ]);
+    }
 }
 

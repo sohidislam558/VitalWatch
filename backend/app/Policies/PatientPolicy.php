@@ -19,7 +19,8 @@ class PatientPolicy
 
     public function create(User $user): bool
     {
-        return in_array($user->role, ['admin', 'nurse'], true);
+        // Only registered nurses can register / onboard patients
+        return $user->role === 'nurse';
     }
 
     public function update(User $user, Patient $patient): bool
@@ -29,8 +30,8 @@ class PatientPolicy
 
     public function delete(User $user, Patient $patient): bool
     {
-        // Safe archival only: cannot delete patients with recorded admissions or vitals
-        return $user->isAdmin() && $patient->vitalRecords()->count() === 0 && $patient->admissions()->count() === 0;
+        // Admin only can delete any patient's entry or information
+        return $user->isAdmin();
     }
 }
 

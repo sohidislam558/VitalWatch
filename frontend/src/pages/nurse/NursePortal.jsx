@@ -18,6 +18,7 @@ import {
   Bed,
   Users,
 } from 'lucide-react';
+import { WARDS } from '../../utils/constants';
 import toast from 'react-hot-toast';
 
 export default function NursePortal() {
@@ -297,13 +298,11 @@ export default function NursePortal() {
                   onChange={(e) => setPatientForm({ ...patientForm, ward: e.target.value })}
                   className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
                 >
-                  <option value="Cardiology ICU">Cardiology ICU</option>
-                  <option value="Intensive Care Unit (ICU)">Intensive Care Unit (ICU)</option>
-                  <option value="Emergency Department">Emergency Department</option>
-                  <option value="General Medical Ward">General Medical Ward</option>
-                  <option value="Surgical Recovery">Surgical Recovery</option>
-                  <option value="Telemetry Observation">Telemetry Observation</option>
-                  <option value="Pediatric Ward">Pediatric Ward</option>
+                  {WARDS.map((w) => (
+                    <option key={w} value={w}>
+                      {w}
+                    </option>
+                  ))}
                 </select>
               </div>
 
