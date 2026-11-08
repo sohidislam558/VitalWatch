@@ -6,6 +6,12 @@ export const admissionService = {
     return response.data;
   },
 
+  async getBeds(ward) {
+    const params = ward ? { ward } : {};
+    const response = await api.get('/admissions/beds', { params });
+    return response.data;
+  },
+
   async getAdmission(id) {
     const response = await api.get(`/admissions/${id}`);
     return response.data;

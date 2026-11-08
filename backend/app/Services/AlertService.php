@@ -92,14 +92,15 @@ class AlertService
 
     /**
      * Mark an emergency alert as "Doctor in Action" (Doctor responding at bedside).
-     * Enforces single-patient concurrency: a doctor can only attend one active case at a time.
+     * Enforces single-patient concurrency: a doctor can only attend one active patient at a time.
+     * Transitions all active alerts for this patient into 'doctor_in_action' in a single clinical action.
      */
     public function markDoctorInAction(Alert $alert, User $user, ?string $note, string $ip): Alert
     {
         // Enforce concurrency limit: A doctor can only attend ONE patient at a time
         if ($user->role === 'doctor') {
             $busyAlert = Alert::where('status', 'doctor_in_action')
-                ->where('id', '!=', $alert->id)
+                ->where('patient_id', '!=', $alert->patient_id)
                 ->whereHas('acknowledgements', function ($q) use ($user) {
                     $q->where('user_id', $user->id)
                       ->where('action', 'doctor_in_action');
@@ -121,23 +122,42 @@ class AlertService
             }
         }
 
+        $actionNote = $note ?: "Doctor in Action: Dr. {$user->name} is actively responding to emergency alarms at bedside.";
+
+        // Transition ALL active emergency alerts for this patient to doctor_in_action!
+        $patientAlerts = Alert::where('patient_id', $alert->patient_id)
+            ->where('status', 'active')
+            ->get();
+
+        foreach ($patientAlerts as $pAlert) {
+            $pAlert->update(['status' => 'doctor_in_action']);
+            AlertAcknowledgement::create([
+                'alert_id' => $pAlert->id,
+                'user_id' => $user->id,
+                'action' => 'doctor_in_action',
+                'note' => $actionNote,
+                'created_at' => now(),
+            ]);
+        }
+
+        // Ensure the target alert itself is updated
         $alert->update(['status' => 'doctor_in_action']);
-
-        $actionNote = $note ?: "Doctor in Action: Dr. {$user->name} is actively responding to this emergency at bedside.";
-
-        AlertAcknowledgement::create([
-            'alert_id' => $alert->id,
-            'user_id' => $user->id,
-            'action' => 'doctor_in_action',
-            'note' => $actionNote,
-            'created_at' => now(),
-        ]);
+        AlertAcknowledgement::firstOrCreate(
+            ['alert_id' => $alert->id, 'user_id' => $user->id, 'action' => 'doctor_in_action'],
+            ['note' => $actionNote, 'created_at' => now()]
+        );
 
         $this->auditService->log(
             action: 'DOCTOR_IN_ACTION',
             entityType: Alert::class,
             entityId: $alert->id,
-            details: ['doctor_id' => $user->id, 'doctor_name' => $user->name, 'note' => $actionNote],
+            details: [
+                'doctor_id' => $user->id,
+                'doctor_name' => $user->name,
+                'patient_id' => $alert->patient_id,
+                'note' => $actionNote,
+                'patient_alerts_count' => $patientAlerts->count(),
+            ],
             user: $user,
             ipAddress: $ip
         );
@@ -174,24 +194,39 @@ class AlertService
 
     /**
      * Resolve an alert (Doctor or Admin).
+     * Resolves all active and doctor_in_action alerts for this patient in a single clinical resolution.
      */
     public function resolve(Alert $alert, User $user, ?string $note, string $ip): Alert
     {
-        $alert->update(['status' => 'resolved']);
+        $actionNote = $note ?: "Bedside assessment completed by Dr. {$user->name}. Clinical alert resolved.";
 
-        AlertAcknowledgement::create([
-            'alert_id' => $alert->id,
-            'user_id' => $user->id,
-            'action' => 'resolved',
-            'note' => $note,
-            'created_at' => now(),
-        ]);
+        // Resolve ALL active, acknowledged, or doctor_in_action alerts for this patient!
+        $patientAlerts = Alert::where('patient_id', $alert->patient_id)
+            ->whereIn('status', ['active', 'doctor_in_action', 'acknowledged'])
+            ->get();
+
+        foreach ($patientAlerts as $pAlert) {
+            $pAlert->update(['status' => 'resolved']);
+            AlertAcknowledgement::create([
+                'alert_id' => $pAlert->id,
+                'user_id' => $user->id,
+                'action' => 'resolved',
+                'note' => $actionNote,
+                'created_at' => now(),
+            ]);
+        }
+
+        $alert->update(['status' => 'resolved']);
 
         $this->auditService->log(
             action: 'ALERT_RESOLVED',
             entityType: Alert::class,
             entityId: $alert->id,
-            details: ['note' => $note],
+            details: [
+                'note' => $actionNote,
+                'patient_id' => $alert->patient_id,
+                'resolved_alerts_count' => $patientAlerts->count(),
+            ],
             user: $user,
             ipAddress: $ip
         );

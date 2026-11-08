@@ -86,6 +86,23 @@ class PatientService
             $patient = Patient::create($patientFields);
 
             if (!empty($data['ward']) && !empty($data['bed_number'])) {
+                $bedOccupied = Admission::where('ward', $data['ward'])
+                    ->where('bed_number', $data['bed_number'])
+                    ->where('status', 'admitted')
+                    ->with('patient')
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($bedOccupied) {
+                    $occupantName = $bedOccupied->patient?->name ?? 'another patient';
+                    $occupantCode = $bedOccupied->patient?->patient_code ?? 'patient';
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'bed_number' => [
+                            "{$data['bed_number']} in {$data['ward']} is currently occupied by {$occupantName} ({$occupantCode}). Please choose an available bed."
+                        ],
+                    ]);
+                }
+
                 Admission::create([
                     'patient_id' => $patient->id,
                     'ward' => $data['ward'],

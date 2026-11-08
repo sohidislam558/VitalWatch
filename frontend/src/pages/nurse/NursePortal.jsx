@@ -18,7 +18,7 @@ import {
   Bed,
   Users,
 } from 'lucide-react';
-import { WARDS } from '../../utils/constants';
+import { WARDS, WARD_BEDS } from '../../utils/constants';
 import toast from 'react-hot-toast';
 
 export default function NursePortal() {
@@ -31,6 +31,7 @@ export default function NursePortal() {
   // New Patient & Admission Modal state
   const [registerModalOpen, setRegisterModalOpen] = useState(false);
   const [submittingPatient, setSubmittingPatient] = useState(false);
+  const [useCustomBed, setUseCustomBed] = useState(false);
   const [patientForm, setPatientForm] = useState({
     name: '',
     date_of_birth: '1980-01-01',
@@ -40,6 +41,37 @@ export default function NursePortal() {
     diagnosis: 'Acute Observation',
     contact: '',
   });
+
+  // Calculate occupied and available beds for currently selected ward
+  const occupiedBedsInWard = patients
+    .filter((p) => p.active_admission?.ward === patientForm.ward)
+    .map((p) => ({
+      bed_number: p.active_admission?.bed_number,
+      patient_name: p.name,
+    }));
+
+  const standardBedsForWard = WARD_BEDS[patientForm.ward] || [
+    'Bed 101', 'Bed 102', 'Bed 103', 'Bed 104', 'Bed 105',
+    'Bed 106', 'Bed 107', 'Bed 108', 'Bed 109', 'Bed 110',
+  ];
+
+  const occupiedBedNumbers = occupiedBedsInWard.map((b) => b.bed_number);
+  const availableBedsForWard = standardBedsForWard.filter(
+    (b) => !occupiedBedNumbers.includes(b)
+  );
+
+  const handleWardChange = (newWard) => {
+    const occupied = patients
+      .filter((p) => p.active_admission?.ward === newWard)
+      .map((p) => p.active_admission?.bed_number);
+    const standard = WARD_BEDS[newWard] || ['Bed 101', 'Bed 102', 'Bed 103'];
+    const available = standard.filter((b) => !occupied.includes(b));
+    setPatientForm((prev) => ({
+      ...prev,
+      ward: newWard,
+      bed_number: available[0] || '',
+    }));
+  };
 
   const loadData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -295,7 +327,7 @@ export default function NursePortal() {
                 </label>
                 <select
                   value={patientForm.ward}
-                  onChange={(e) => setPatientForm({ ...patientForm, ward: e.target.value })}
+                  onChange={(e) => handleWardChange(e.target.value)}
                   className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
                 >
                   {WARDS.map((w) => (
@@ -307,16 +339,67 @@ export default function NursePortal() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Bed Designation <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  required
-                  type="text"
-                  placeholder="e.g. Bed 101 or ICU-02"
-                  value={patientForm.bed_number}
-                  onChange={(e) => setPatientForm({ ...patientForm, bed_number: e.target.value })}
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Bed Designation <span className="text-red-500">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setUseCustomBed(!useCustomBed)}
+                    className="text-[10px] text-blue-600 hover:text-blue-800 underline font-medium"
+                  >
+                    {useCustomBed ? 'Available beds' : '+ Custom bed'}
+                  </button>
+                </div>
+
+                {useCustomBed ? (
+                  <Input
+                    required
+                    type="text"
+                    placeholder="e.g. Bed 101 or ICU-02"
+                    value={patientForm.bed_number}
+                    onChange={(e) => setPatientForm({ ...patientForm, bed_number: e.target.value })}
+                  />
+                ) : (
+                  <div>
+                    <select
+                      value={patientForm.bed_number}
+                      onChange={(e) => setPatientForm({ ...patientForm, bed_number: e.target.value })}
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      {availableBedsForWard.length === 0 && occupiedBedsInWard.length === 0 && (
+                        <option value="">No beds configured</option>
+                      )}
+
+                      {availableBedsForWard.length > 0 && (
+                        <optgroup label={`Available Beds (${availableBedsForWard.length})`}>
+                          {availableBedsForWard.map((b) => (
+                            <option key={b} value={b}>
+                              🟢 {b} (Available)
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+
+                      {occupiedBedsInWard.length > 0 && (
+                        <optgroup label={`Occupied Beds (${occupiedBedsInWard.length})`}>
+                          {occupiedBedsInWard.map((occ) => (
+                            <option key={occ.bed_number} value={occ.bed_number} disabled>
+                              🔴 {occ.bed_number} (Occupied — {occ.patient_name})
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+
+                    <div className="mt-1 text-[10px] text-slate-500 flex items-center justify-between">
+                      <span>{availableBedsForWard.length} beds available</span>
+                      {availableBedsForWard.length === 0 && (
+                        <span className="text-red-600 font-bold">Ward is full</span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

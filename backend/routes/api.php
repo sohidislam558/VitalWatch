@@ -53,6 +53,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
 
     // Admissions
     Route::get('/admissions', [AdmissionController::class, 'index']);
+    Route::get('/admissions/beds', [AdmissionController::class, 'beds']);
     Route::post('/admissions', [AdmissionController::class, 'store']);
     Route::get('/admissions/{id}', [AdmissionController::class, 'show']);
     Route::patch('/admissions/{id}/discharge', [AdmissionController::class, 'discharge']);

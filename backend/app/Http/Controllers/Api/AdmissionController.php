@@ -35,6 +35,23 @@ class AdmissionController extends Controller
     }
 
     /**
+     * Get occupied and available bed numbers for wards.
+     */
+    public function beds(Request $request): JsonResponse
+    {
+        $this->authorize('viewAny', Admission::class);
+
+        $ward = $request->query('ward');
+        $overview = $this->admissionService->getBedsOverview($ward);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Bed occupancy overview retrieved.',
+            'data' => $overview,
+        ]);
+    }
+
+    /**
      * Admit a patient to a ward and bed.
      */
     public function store(StoreAdmissionRequest $request): JsonResponse

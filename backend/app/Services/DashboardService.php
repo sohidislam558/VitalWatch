@@ -77,27 +77,30 @@ class DashboardService
             $activeAlerts = $patient->alerts;
             $vitals = $patient->latestVitalRecord;
 
-            $doctorInActionAlert = $activeAlerts->firstWhere('status', 'doctor_in_action');
-            $urgentAlert = $activeAlerts->where('status', 'active')->firstWhere('priority', 'urgent');
-            $reviewAlert = $activeAlerts->where('status', 'active')->firstWhere('priority', 'review');
+            $doctorInActionAlerts = $activeAlerts->where('status', 'doctor_in_action');
+            $urgentAlerts = $activeAlerts->where('status', 'active')->where('priority', 'urgent');
+            $reviewAlerts = $activeAlerts->where('status', 'active')->where('priority', 'review');
 
-            if ($doctorInActionAlert) {
-                $ackDoctor = $doctorInActionAlert->acknowledgements->where('action', 'doctor_in_action')->last()?->user?->name;
+            if ($doctorInActionAlerts->isNotEmpty()) {
+                $ackDoctor = $doctorInActionAlerts->first()->acknowledgements->where('action', 'doctor_in_action')->last()?->user?->name;
                 $doctorText = $ackDoctor ? "Dr. {$ackDoctor}" : "Attending Doctor";
 
                 $status = 'doctor_in_action';
                 $statusLabel = 'Doctor in Action';
-                $situationDescription = "{$doctorText} is actively attending bedside to manage: {$doctorInActionAlert->message}";
+                $combined = $doctorInActionAlerts->pluck('message')->unique()->implode(' • ');
+                $situationDescription = "{$doctorText} is actively attending bedside to manage: {$combined}";
                 $badgeColor = 'blue';
-            } elseif ($urgentAlert) {
+            } elseif ($urgentAlerts->isNotEmpty()) {
                 $status = 'emergency';
                 $statusLabel = 'Emergency Attention';
-                $situationDescription = "EMERGENCY ALARM: {$urgentAlert->message}. Attending Physician notified via Gmail SMTP.";
+                $combined = $urgentAlerts->pluck('message')->unique()->implode(' • ');
+                $situationDescription = "EMERGENCY ALARM: {$combined}. Attending Physician notified via Gmail SMTP.";
                 $badgeColor = 'red';
-            } elseif ($reviewAlert) {
+            } elseif ($reviewAlerts->isNotEmpty()) {
                 $status = 'review';
                 $statusLabel = 'Attention Needed';
-                $situationDescription = "NOTICE: {$reviewAlert->message}. Monitor patient carefully.";
+                $combined = $reviewAlerts->pluck('message')->unique()->implode(' • ');
+                $situationDescription = "NOTICE: {$combined}. Monitor patient carefully.";
                 $badgeColor = 'amber';
             } elseif ($vitals) {
                 $status = 'stable';

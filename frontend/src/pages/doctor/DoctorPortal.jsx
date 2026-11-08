@@ -7,19 +7,14 @@ import PageContainer from '../../components/layout/PageContainer';
 import SituationMonitor from '../../components/dashboard/SituationMonitor';
 import Modal from '../../components/common/Modal';
 import Button from '../../components/common/Button';
-import Textarea from '../../components/common/Textarea';
 import {
   Stethoscope,
   AlertTriangle,
   Mail,
   CheckCircle2,
   RefreshCw,
-  BellRing,
-  Bed,
   Clock,
   ShieldAlert,
-  ChevronRight,
-  TrendingUp,
   Ban,
   HeartPulse,
 } from 'lucide-react';
@@ -34,8 +29,8 @@ export default function DoctorPortal() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Doctor in action confirmation state
-  const [actionAlert, setActionAlert] = useState(null);
+  // Doctor in action confirmation state (grouped by patient)
+  const [actionPatientGroup, setActionPatientGroup] = useState(null);
   const [doctorNote, setDoctorNote] = useState('');
   const [actionSubmitting, setActionSubmitting] = useState(false);
   const [assessmentSubmitting, setAssessmentSubmitting] = useState(false);
@@ -47,7 +42,7 @@ export default function DoctorPortal() {
     try {
       const [patientsRes, alertsRes] = await Promise.all([
         dashboardService.getMonitoringPatients(),
-        dashboardService.getActiveAlerts({ limit: 10 }),
+        dashboardService.getActiveAlerts({ limit: 50 }),
       ]);
 
       setPatients(patientsRes.data?.data || []);
@@ -64,8 +59,8 @@ export default function DoctorPortal() {
     loadData();
   }, [loadData]);
 
-  // Check if this doctor is ALREADY attending a patient
-  const currentAttendingAlert = activeAlerts.find(
+  // Check if this doctor is ALREADY attending a patient (gathering all alerts for that patient)
+  const myAttendingAlerts = activeAlerts.filter(
     (a) =>
       a.status === 'doctor_in_action' &&
       a.acknowledgements?.some(
@@ -73,19 +68,74 @@ export default function DoctorPortal() {
       )
   );
 
-  const isDoctorBusy = !!currentAttendingAlert;
+  const currentAttendingPatient = myAttendingAlerts[0]?.patient;
+  const isDoctorBusy = myAttendingAlerts.length > 0;
 
-  // Handle Mark Doctor in Action
+  // Group active emergency alerts by patient so that there is EXACTLY ONE BOX FOR ONE PATIENT
+  const emergencyPatients = Object.values(
+    activeAlerts
+      .filter((a) => a.status === 'active')
+      .reduce((acc, alert) => {
+        const patientId = alert.patient_id || alert.patient?.id;
+        if (!patientId) return acc;
+        if (!acc[patientId]) {
+          acc[patientId] = {
+            patient: alert.patient,
+            patientId,
+            alerts: [],
+            primaryAlert: alert,
+            hasUrgent: false,
+          };
+        }
+        acc[patientId].alerts.push(alert);
+        if (alert.priority === 'urgent') {
+          acc[patientId].hasUrgent = true;
+        }
+        return acc;
+      }, {})
+  );
+
+  // Group alerts attended by OTHER doctors by patient (one box per patient)
+  const otherDoctorInActionPatients = Object.values(
+    activeAlerts
+      .filter(
+        (a) =>
+          a.status === 'doctor_in_action' &&
+          !myAttendingAlerts.some((ma) => ma.id === a.id)
+      )
+      .reduce((acc, alert) => {
+        const patientId = alert.patient_id || alert.patient?.id;
+        if (!patientId) return acc;
+        if (!acc[patientId]) {
+          const attendingDoctor = alert.acknowledgements?.find(
+            (ack) => ack.action === 'doctor_in_action'
+          )?.user?.name;
+          acc[patientId] = {
+            patient: alert.patient,
+            patientId,
+            alerts: [],
+            attendingDoctor: attendingDoctor ? `Dr. ${attendingDoctor}` : 'Attending Physician',
+          };
+        }
+        acc[patientId].alerts.push(alert);
+        return acc;
+      }, {})
+  );
+
+  // Handle Mark Doctor in Action: marks all active alerts for this patient in one go
   const handleMarkDoctorInAction = async () => {
-    if (!actionAlert) return;
+    if (!actionPatientGroup) return;
     setActionSubmitting(true);
     try {
       await alertService.markDoctorInAction(
-        actionAlert.id,
-        doctorNote || `Dr. ${user?.name || 'Physician'} attending bedside.`
+        actionPatientGroup.primaryAlert.id,
+        doctorNote ||
+          `Dr. ${user?.name || 'Physician'} attending bedside for ${actionPatientGroup.patient?.name}.`
       );
-      toast.success('Bedside attendance logged: Doctor in Action!');
-      setActionAlert(null);
+      toast.success(
+        `Bedside attendance logged: Doctor in Action for ${actionPatientGroup.patient?.name}!`
+      );
+      setActionPatientGroup(null);
       setDoctorNote('');
       refreshAlerts();
       loadData(true);
@@ -100,12 +150,17 @@ export default function DoctorPortal() {
     }
   };
 
-  // Simple 1-Click: Assessment Done
+  // Simple 1-Click: Assessment Done (resolves all alerts for this patient)
   const handleAssessmentDone = async (alertId) => {
+    const targetId = alertId || myAttendingAlerts[0]?.id;
+    if (!targetId) return;
+
     setAssessmentSubmitting(true);
     try {
-      await alertService.markAssessmentDone(alertId);
-      toast.success('Bedside assessment completed! Case resolved and you are now available.');
+      await alertService.markAssessmentDone(targetId);
+      toast.success(
+        'Bedside assessment completed! All alarms resolved and you are now available.'
+      );
       refreshAlerts();
       loadData(true);
     } catch (err) {
@@ -114,11 +169,6 @@ export default function DoctorPortal() {
       setAssessmentSubmitting(false);
     }
   };
-
-  const emergencyAlerts = activeAlerts.filter((a) => a.status === 'active');
-  const otherDoctorInActionAlerts = activeAlerts.filter(
-    (a) => a.status === 'doctor_in_action' && a.id !== currentAttendingAlert?.id
-  );
 
   return (
     <PageContainer>
@@ -149,8 +199,8 @@ export default function DoctorPortal() {
         </button>
       </div>
 
-      {/* ACTIVE BEDSIDE ATTENDANCE CARD (When this doctor is currently in an action) */}
-      {currentAttendingAlert && (
+      {/* ACTIVE BEDSIDE ATTENDANCE CARD (When this doctor is currently attending a patient) */}
+      {currentAttendingPatient && (
         <div className="mb-6 p-5 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white rounded-2xl shadow-lg border-2 border-blue-400/40">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start gap-3.5">
@@ -167,14 +217,24 @@ export default function DoctorPortal() {
                   </span>
                 </div>
                 <h3 className="text-lg font-bold text-white mt-0.5">
-                  {currentAttendingAlert.patient?.name} •{' '}
+                  {currentAttendingPatient.name} •{' '}
                   <span className="text-slate-300 text-sm font-normal">
-                    {currentAttendingAlert.patient?.active_admission?.ward} (Bed {currentAttendingAlert.patient?.active_admission?.bed_number})
+                    {currentAttendingPatient.active_admission?.ward} (Bed {currentAttendingPatient.active_admission?.bed_number})
                   </span>
                 </h3>
-                <div className="mt-1 text-xs text-blue-100 bg-white/10 px-3 py-1 rounded-lg border border-white/10 inline-block font-mono">
-                  🚨 {currentAttendingAlert.message}
+
+                {/* All alarms for this patient in this single box */}
+                <div className="mt-2 space-y-1">
+                  {myAttendingAlerts.map((alert) => (
+                    <div
+                      key={alert.id}
+                      className="text-xs text-blue-100 bg-white/10 px-3 py-1.5 rounded-lg border border-white/10 flex items-center gap-2 font-mono"
+                    >
+                      <span>🚨 {alert.message}</span>
+                    </div>
+                  ))}
                 </div>
+
                 <p className="mt-2 text-[11px] text-blue-200">
                   <strong>Concurrency Policy:</strong> You are attending this patient. Complete assessment to release your focus for other patients.
                 </p>
@@ -186,14 +246,14 @@ export default function DoctorPortal() {
                 variant="primary"
                 size="lg"
                 loading={assessmentSubmitting}
-                onClick={() => handleAssessmentDone(currentAttendingAlert.id)}
+                onClick={() => handleAssessmentDone(myAttendingAlerts[0]?.id)}
                 className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-6 py-3 rounded-xl shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 text-sm"
               >
                 <CheckCircle2 className="w-5 h-5" />
                 <span>Assessment Done</span>
               </Button>
               <span className="text-[10px] text-slate-300 text-center sm:text-right">
-                Simple 1-click completion & resolution
+                1-click completion: resolves all alarms for this patient
               </span>
             </div>
           </div>
@@ -220,17 +280,21 @@ export default function DoctorPortal() {
         </div>
 
         <div className="flex items-center gap-3 text-xs text-slate-300 bg-white/10 px-3 py-2 rounded-xl backdrop-blur-xs self-stretch sm:self-auto justify-between sm:justify-start">
-          <span>Active Emergencies:</span>
-          <span className={`font-mono font-bold px-2 py-0.5 rounded text-xs ${
-            emergencyAlerts.length > 0 ? 'bg-red-500 text-white animate-pulse' : 'bg-emerald-500/30 text-emerald-300'
-          }`}>
-            {emergencyAlerts.length}
+          <span>Patients Needing Attention:</span>
+          <span
+            className={`font-mono font-bold px-2 py-0.5 rounded text-xs ${
+              emergencyPatients.length > 0
+                ? 'bg-red-500 text-white animate-pulse'
+                : 'bg-emerald-500/30 text-emerald-300'
+            }`}
+          >
+            {emergencyPatients.length}
           </span>
         </div>
       </div>
 
-      {/* EMERGENCY ATTENTION CENTER */}
-      {emergencyAlerts.length > 0 && (
+      {/* EMERGENCY ATTENTION CENTER — ONE BOX PER PATIENT */}
+      {emergencyPatients.length > 0 && (
         <div className="mb-6 bg-red-50/70 border-2 border-red-300 rounded-2xl p-5 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -241,99 +305,158 @@ export default function DoctorPortal() {
               </h2>
             </div>
             <span className="text-xs font-bold text-red-700 bg-red-100 px-2.5 py-1 rounded-full border border-red-200">
-              {emergencyAlerts.length} Action Needed
+              {emergencyPatients.length} Patient{emergencyPatients.length > 1 ? 's' : ''} Need Action
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {emergencyAlerts.map((alert) => (
-              <div
-                key={alert.id}
-                className="bg-white p-4 rounded-xl border border-red-200 shadow-xs flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div>
-                      <div className="font-bold text-sm text-slate-900">{alert.patient?.name}</div>
-                      <div className="text-xs text-slate-500">
-                        {alert.patient?.active_admission?.ward || 'Ward'} • Bed {alert.patient?.active_admission?.bed_number || 'N/A'}
+          {/* Grid of Patient Boxes: ONE BOX FOR ONE PATIENT */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {emergencyPatients.map((group) => {
+              const patient = group.patient;
+              const admission = patient?.active_admission;
+
+              return (
+                <div
+                  key={group.patientId}
+                  className="bg-white p-4 rounded-xl border-2 border-red-200 shadow-sm flex flex-col justify-between hover:border-red-300 transition-colors"
+                >
+                  <div>
+                    {/* Top Row: Patient Info & Bed */}
+                    <div className="flex items-start justify-between gap-2 mb-2 pb-2 border-b border-slate-100">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-base text-slate-900">
+                            {patient?.name}
+                          </span>
+                          <span className="font-mono text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                            {patient?.patient_code}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          {admission?.ward || 'Ward'} •{' '}
+                          <span className="font-semibold text-slate-700">
+                            Bed {admission?.bed_number || 'N/A'}
+                          </span>{' '}
+                          • {admission?.diagnosis || 'Inpatient Observation'}
+                        </div>
                       </div>
+
+                      <span className="px-2.5 py-1 text-[10px] font-bold uppercase rounded-full bg-red-600 text-white animate-pulse flex-shrink-0">
+                        {group.hasUrgent ? 'Critical Alarm' : 'Attention Needed'}
+                      </span>
                     </div>
-                    <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-red-600 text-white animate-pulse">
-                      Critical
+
+                    {/* Vitals Disbalances Container: ALL UNSTABLE VITALS IN THIS SINGLE BOX */}
+                    <div className="space-y-1.5 my-3">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-red-800 flex items-center gap-1.5">
+                        <HeartPulse className="w-3.5 h-3.5 text-red-600" />
+                        <span>
+                          Unstable Vitals Disbalance ({group.alerts.length}):
+                        </span>
+                      </div>
+
+                      {group.alerts.map((alert) => (
+                        <div
+                          key={alert.id}
+                          className="text-xs font-semibold text-red-900 bg-red-50 p-2.5 rounded-lg border border-red-200/80 flex items-start gap-2"
+                        >
+                          <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <div>{alert.message}</div>
+                            <div className="text-[10px] text-red-700/80 font-normal mt-0.5 flex items-center gap-2">
+                              <span>Rule: {alert.alert_rule?.name || 'Threshold Rule'}</span>
+                              <span>•</span>
+                              <span className="flex items-center gap-0.5">
+                                <Clock className="w-3 h-3" />
+                                {new Date(alert.created_at).toLocaleTimeString([], {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Footer: EXACTLY ONE "Doctor in Action" button for this patient */}
+                  <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      Physician response required
                     </span>
-                  </div>
 
-                  <div className="text-xs font-semibold text-red-700 bg-red-50 p-2.5 rounded-lg border border-red-200/60 mb-2">
-                    {alert.message}
-                  </div>
-
-                  <div className="text-[11px] text-slate-500">
-                    Triggered at: {new Date(alert.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Rule: {alert.alert_rule?.name || 'Threshold Rule'}
+                    {isDoctorBusy ? (
+                      <button
+                        type="button"
+                        disabled
+                        title={`You are currently attending ${currentAttendingPatient?.name}. Complete that assessment first.`}
+                        className="px-3.5 py-2 bg-slate-100 text-slate-400 text-xs font-bold rounded-lg cursor-not-allowed flex items-center gap-1.5 border border-slate-200"
+                      >
+                        <Ban className="w-3.5 h-3.5" />
+                        <span>
+                          Busy with Bed {currentAttendingPatient?.active_admission?.bed_number}
+                        </span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActionPatientGroup(group);
+                          setDoctorNote(
+                            `Dr. ${user?.name || 'Physician'} attending bedside to manage: ${group.alerts
+                              .map((a) => a.message)
+                              .join('; ')}`
+                          );
+                        }}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-all hover:scale-105"
+                      >
+                        <Stethoscope className="w-3.5 h-3.5" />
+                        <span>🩺 Mark Doctor in Action</span>
+                      </button>
+                    )}
                   </div>
                 </div>
-
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-[11px] text-slate-500">
-                    Bedside attendance
-                  </span>
-
-                  {/* If doctor is already busy with another patient, disable button */}
-                  {isDoctorBusy ? (
-                    <button
-                      type="button"
-                      disabled
-                      title={`You are currently attending ${currentAttendingAlert?.patient?.name}. Complete that assessment first.`}
-                      className="px-3 py-1.5 bg-slate-100 text-slate-400 text-xs font-bold rounded-lg cursor-not-allowed flex items-center gap-1.5 border border-slate-200"
-                    >
-                      <Ban className="w-3.5 h-3.5" />
-                      <span>Busy with Bed {currentAttendingAlert?.patient?.active_admission?.bed_number}</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActionAlert(alert);
-                        setDoctorNote(`Dr. ${user?.name || 'Physician'} attending bedside to manage: ${alert.message}`);
-                      }}
-                      className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-all hover:scale-105"
-                    >
-                      <Stethoscope className="w-3.5 h-3.5" />
-                      <span>🩺 Mark Doctor in Action</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="mt-3 text-[11px] text-red-800 flex items-center gap-1.5">
             <ShieldAlert className="w-3.5 h-3.5 flex-shrink-0 text-red-600" />
             <span>
-              Click <strong>'Doctor in Action'</strong> to attend. A doctor can attend only <strong>one patient at a time</strong>. Click <strong>'Assessment Done'</strong> when finished to resolve the alert.
+              Click <strong>'Doctor in Action'</strong> to attend. A doctor can attend only <strong>one patient at a time</strong>. Click <strong>'Assessment Done'</strong> when finished to resolve all alarms.
             </span>
           </div>
         </div>
       )}
 
-      {/* OTHER DOCTORS IN ACTION */}
-      {otherDoctorInActionAlerts.length > 0 && (
+      {/* OTHER DOCTORS IN ACTION — ALSO GROUPED ONE BOX PER PATIENT */}
+      {otherDoctorInActionPatients.length > 0 && (
         <div className="mb-6 bg-slate-100 border border-slate-200 rounded-2xl p-4 shadow-xs">
           <div className="flex items-center gap-2 mb-2">
             <Stethoscope className="w-4 h-4 text-slate-600" />
             <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Other Attending Physicians In Action ({otherDoctorInActionAlerts.length})
+              Other Attending Physicians In Action ({otherDoctorInActionPatients.length})
             </h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-            {otherDoctorInActionAlerts.map((alert) => (
-              <div key={alert.id} className="bg-white p-2.5 rounded-lg border border-slate-200 text-xs">
-                <div className="font-bold text-slate-900">{alert.patient?.name}</div>
-                <div className="text-[11px] text-slate-500">
-                  {alert.patient?.active_admission?.ward} • Bed {alert.patient?.active_admission?.bed_number}
+            {otherDoctorInActionPatients.map((group) => (
+              <div
+                key={group.patientId}
+                className="bg-white p-3 rounded-lg border border-slate-200 text-xs flex flex-col justify-between"
+              >
+                <div>
+                  <div className="font-bold text-slate-900">{group.patient?.name}</div>
+                  <div className="text-[11px] text-slate-500">
+                    {group.patient?.active_admission?.ward} • Bed {group.patient?.active_admission?.bed_number}
+                  </div>
+                  <div className="mt-1 text-[11px] text-slate-600">
+                    {group.alerts.length} alarm{group.alerts.length > 1 ? 's' : ''} being managed
+                  </div>
                 </div>
-                <div className="text-[10px] text-blue-700 font-semibold mt-1">
-                  Bedside physician attending
+                <div className="text-[10px] text-blue-700 font-semibold mt-2 pt-1 border-t border-slate-100 flex items-center gap-1">
+                  <Stethoscope className="w-3 h-3 text-blue-600" />
+                  <span>Attended by {group.attendingDoctor}</span>
                 </div>
               </div>
             ))}
@@ -359,7 +482,7 @@ export default function DoctorPortal() {
           </div>
           <h2 className="text-lg font-bold text-slate-900">No Patients Currently Admitted</h2>
           <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
-            The hospital roster is completely clean. When a bedside nurse registers and admits a patient to a ward, their situation telemetry will appear here for observation.
+            The hospital roster is clean. When a bedside nurse registers and admits a patient to a ward, their situation telemetry will appear here for observation.
           </p>
         </div>
       ) : (
@@ -367,33 +490,45 @@ export default function DoctorPortal() {
           patients={patients}
           loading={loading}
           onRefresh={() => loadData(true)}
-          currentAttendingAlertId={currentAttendingAlert?.id}
+          currentAttendingAlertId={myAttendingAlerts[0]?.id}
           onAssessmentDone={handleAssessmentDone}
         />
       )}
 
-      {/* Doctor in Action Confirmation Modal */}
-      {actionAlert && (
+      {/* Doctor in Action Confirmation Modal (for the entire patient) */}
+      {actionPatientGroup && (
         <Modal
-          isOpen={!!actionAlert}
-          onClose={() => setActionAlert(null)}
-          title="Confirm Bedside Attendance"
+          isOpen={!!actionPatientGroup}
+          onClose={() => setActionPatientGroup(null)}
+          title={`Confirm Bedside Attendance: ${actionPatientGroup.patient?.name}`}
         >
           <div className="space-y-4">
             <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-900 text-xs">
-              <div className="font-bold flex items-center gap-1.5 mb-1">
+              <div className="font-bold flex items-center gap-1.5 mb-2">
                 <AlertTriangle className="w-4 h-4 text-red-600" />
-                <span>Active Alarm: {actionAlert.patient?.name}</span>
+                <span>
+                  Active Emergency Alarms ({actionPatientGroup.alerts.length}):
+                </span>
               </div>
-              <div>{actionAlert.message}</div>
+              <ul className="list-disc pl-5 space-y-1">
+                {actionPatientGroup.alerts.map((a) => (
+                  <li key={a.id} className="font-semibold">
+                    {a.message}
+                  </li>
+                ))}
+              </ul>
             </div>
 
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-900 text-xs">
-              <strong>Single-Patient Concurrency Notice:</strong> While you are attending this patient, you will not be able to select another patient until you click <strong>'Assessment Done'</strong>.
+              <strong>Single-Patient Attendance Notice:</strong> You will be actively registered as the attending bedside physician for <strong>{actionPatientGroup.patient?.name}</strong>. While attending, you will not be able to select another patient until you click <strong>'Assessment Done'</strong>.
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="secondary" onClick={() => setActionAlert(null)} disabled={actionSubmitting}>
+              <Button
+                variant="secondary"
+                onClick={() => setActionPatientGroup(null)}
+                disabled={actionSubmitting}
+              >
                 Cancel
               </Button>
               <Button

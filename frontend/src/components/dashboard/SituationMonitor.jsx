@@ -464,6 +464,21 @@ export default function SituationMonitor({
                         Patient Bedside Situation
                       </div>
                       <div className="font-medium text-xs">{description}</div>
+                      {patient.alerts?.filter((a) => ['active', 'doctor_in_action'].includes(a.status)).length > 1 && (
+                        <div className="mt-2 space-y-1">
+                          {patient.alerts
+                            .filter((a) => ['active', 'doctor_in_action'].includes(a.status))
+                            .map((a) => (
+                              <div
+                                key={a.id}
+                                className="text-[11px] font-semibold text-red-950 bg-white/80 px-2 py-0.5 rounded border border-red-200 flex items-center gap-1.5"
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse" />
+                                <span>{a.message}</span>
+                              </div>
+                            ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 

@@ -111,10 +111,14 @@ class RoleWorkflowTest extends TestCase
         $admission1 = $patient1->activeAdmission;
         $this->assertNotNull($admission1);
 
-        // Ensure alert rule for heart_rate > 120 exists
+        // Ensure alert rules for heart_rate > 120 AND spo2 < 90 exist
         AlertRule::firstOrCreate(
             ['parameter' => 'heart_rate', 'operator' => 'greater_than', 'threshold_value' => 120],
-            ['name' => 'Severe Tachycardia', 'priority' => 'urgent', 'is_active' => true]
+            ['name' => 'Severe Tachycardia', 'priority' => 'urgent', 'is_active' => true, 'message_template' => 'High heart rate: {val} bpm']
+        );
+        AlertRule::firstOrCreate(
+            ['parameter' => 'spo2', 'operator' => 'less_than', 'threshold_value' => 90],
+            ['name' => 'Severe Hypoxemia', 'priority' => 'urgent', 'is_active' => true, 'message_template' => 'Low oxygen saturation: {val}%']
         );
 
         // STEP 2: Verify Doctor CANNOT record vitals (Blocked by Policy: 403 Forbidden)
@@ -132,7 +136,7 @@ class RoleWorkflowTest extends TestCase
         ]);
         $doctorVitalAttempt->assertStatus(403);
 
-        // STEP 3: Nurse records critical vitals on Patient 1 (HR: 135 bpm)
+        // STEP 3: Nurse records multiple critical vitals on Patient 1 (HR: 135 bpm, SpO2: 85%)
         auth()->forgetGuards();
         $nurseVitalRecord1 = $this->withHeaders($nurseHeaders)->postJson('/api/vitals', [
             'patient_id' => $patient1->id,
@@ -140,27 +144,30 @@ class RoleWorkflowTest extends TestCase
             'heart_rate' => 135,
             'systolic_bp' => 140,
             'diastolic_bp' => 90,
-            'spo2' => 96,
+            'spo2' => 85,
             'temperature' => 37.5,
             'respiratory_rate' => 20,
             'measured_at' => now()->toDateTimeString(),
         ]);
         $nurseVitalRecord1->assertStatus(201);
 
-        // Verify active alert 1 was created
-        $alert1 = Alert::where('patient_id', $patient1->id)->where('status', 'active')->latest()->first();
-        $this->assertNotNull($alert1, 'Emergency alert should have been generated for Patient 1');
+        // Verify MULTIPLE active alerts were created for Patient 1 (HR and SpO2)
+        $patient1Alerts = Alert::where('patient_id', $patient1->id)->where('status', 'active')->get();
+        $this->assertGreaterThanOrEqual(2, $patient1Alerts->count(), 'Patient 1 should have multiple emergency alerts for unstable vitals');
+        $primaryAlert1 = $patient1Alerts->first();
 
-        // STEP 4: Doctor responds to Patient 1 with "Doctor in Action"
+        // STEP 4: Doctor responds to Patient 1 with a SINGLE "Doctor in Action"
+        // This MUST transition ALL active alerts for Patient 1 to 'doctor_in_action'
         auth()->forgetGuards();
-        $doctorAction1 = $this->withHeaders($doctorHeaders)->patchJson("/api/alerts/{$alert1->id}/doctor-in-action", [
+        $doctorAction1 = $this->withHeaders($doctorHeaders)->patchJson("/api/alerts/{$primaryAlert1->id}/doctor-in-action", [
             'note' => 'Dr. Robert attending bedside for Patient 1.',
         ]);
         $doctorAction1->assertStatus(200)
             ->assertJsonPath('success', true);
 
-        $alert1->refresh();
-        $this->assertEquals('doctor_in_action', $alert1->status);
+        // Assert ALL alerts for Patient 1 are now 'doctor_in_action'
+        $untransitedAlerts = Alert::where('patient_id', $patient1->id)->where('status', '!=', 'doctor_in_action')->count();
+        $this->assertEquals(0, $untransitedAlerts, 'All alerts for Patient 1 must be moved to doctor_in_action together');
 
         // STEP 5: Nurse admits Patient 2 and records critical vitals on Patient 2
         auth()->forgetGuards();
@@ -203,12 +210,13 @@ class RoleWorkflowTest extends TestCase
 
         // STEP 7: Doctor finishes bedside assessment on Patient 1 using 1-click "Assessment Done"
         auth()->forgetGuards();
-        $assessmentDoneRes = $this->withHeaders($doctorHeaders)->patchJson("/api/alerts/{$alert1->id}/assessment-done");
+        $assessmentDoneRes = $this->withHeaders($doctorHeaders)->patchJson("/api/alerts/{$primaryAlert1->id}/assessment-done");
         $assessmentDoneRes->assertStatus(200)
             ->assertJsonPath('success', true);
 
-        $alert1->refresh();
-        $this->assertEquals('resolved', $alert1->status, 'Alert 1 must be resolved after Assessment Done');
+        // Assert ALL alerts for Patient 1 are now resolved!
+        $unresolvedAlerts = Alert::where('patient_id', $patient1->id)->where('status', '!=', 'resolved')->count();
+        $this->assertEquals(0, $unresolvedAlerts, 'All alerts for Patient 1 must be resolved together when assessment is done');
 
         // STEP 8: Now that Doctor is released, Doctor can claim Patient 2 for "Doctor in Action"
         auth()->forgetGuards();
