@@ -12,8 +12,12 @@ use Illuminate\Support\Facades\Route;
 Route::get('/{any?}', function () {
     $indexPath = public_path('index.html');
     if (file_exists($indexPath)) {
-        return response()->file($indexPath);
+        return response()->file($indexPath, [
+            'Cache-Control' => 'no-cache, no-store, must-revalidate',
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
+        ]);
     }
     return view('welcome');
-})->where('any', '^(?!api).*$');
+})->where('any', '^(?!(api|assets|favicon)).*$');
 

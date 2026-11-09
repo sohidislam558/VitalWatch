@@ -34,8 +34,12 @@ export const authService = {
   },
 
   getCurrentUser() {
-    const raw = sessionStorage.getItem('vitalwatch_user');
-    return raw ? JSON.parse(raw) : null;
+    try {
+      const raw = sessionStorage.getItem('vitalwatch_user');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
   },
 
   getToken() {
