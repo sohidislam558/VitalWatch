@@ -229,7 +229,8 @@ class RoleWorkflowTest extends TestCase
         $alert2->refresh();
         $this->assertEquals('doctor_in_action', $alert2->status);
 
-        // STEP 9: Nurse records subsequent normal vitals for Patient 2 -> Auto-resolves!
+        // STEP 9: Nurse records subsequent normal vitals for Patient 2 while Doctor is in action.
+        // EMERGENCY WINDOW OF DOCTOR IN ACTION MUST NOT DISAPPEAR! Status updates to 'Patient Stabilizing'.
         auth()->forgetGuards();
         $nurseFollowUp = $this->withHeaders($nurseHeaders)->postJson('/api/vitals', [
             'patient_id' => $patient2->id,
@@ -245,7 +246,20 @@ class RoleWorkflowTest extends TestCase
         $nurseFollowUp->assertStatus(201);
 
         $alert2->refresh();
-        $this->assertEquals('resolved', $alert2->status, 'Alert 2 must auto-resolve after follow-up normal vitals');
+        $this->assertEquals('doctor_in_action', $alert2->status, 'Alert 2 must NOT disappear or auto-resolve while doctor is in action');
+
+        // Verify patient situation status is now 'Doctor in Action: Patient Stabilizing'
+        $patientsOverview = $this->withHeaders($doctorHeaders)->getJson('/api/dashboard/patients');
+        $patient2Data = collect($patientsOverview->json('data.data'))->firstWhere('id', $patient2->id);
+        $this->assertEquals('Doctor in Action: Patient Stabilizing', $patient2Data['situation_label']);
+
+        // Doctor formally finishes assessment on Patient 2 -> Case resolved!
+        auth()->forgetGuards();
+        $docDone2 = $this->withHeaders($doctorHeaders)->patchJson("/api/alerts/{$alert2->id}/assessment-done");
+        $docDone2->assertStatus(200);
+
+        $alert2->refresh();
+        $this->assertEquals('resolved', $alert2->status, 'Alert 2 is now resolved after doctor finishes assessment');
 
         // STEP 10: Admin accesses live hospital activity stream
         auth()->forgetGuards();
@@ -259,6 +273,5 @@ class RoleWorkflowTest extends TestCase
         $this->assertContains('RECORD_VITALS', $actions);
         $this->assertContains('DOCTOR_IN_ACTION', $actions);
         $this->assertContains('ALERT_RESOLVED', $actions);
-        $this->assertContains('ALERT_AUTO_RESOLVED_BY_NEW_VITALS', $actions);
     }
 }

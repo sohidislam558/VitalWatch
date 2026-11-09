@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import { dashboardService } from '../services/settingsService';
 import { useAuth } from './AuthContext';
+import { onTelemetryUpdate } from '../utils/realtime';
 
 const NotificationContext = createContext(null);
 
@@ -12,9 +13,8 @@ export function NotificationProvider({ children }) {
   const fetchAlertCount = async () => {
     if (!isAuthenticated) return;
     try {
-      const res = await dashboardService.getActiveAlerts({ limit: 1 });
-      // Total active alerts
       const summary = await dashboardService.getSummary();
+      // Count is number of distinct patients with active alarms
       setUnreadAlertCount(summary.data?.active_alerts || 0);
     } catch {
       // Background poll failure handled gracefully
@@ -24,8 +24,19 @@ export function NotificationProvider({ children }) {
   useEffect(() => {
     if (isAuthenticated) {
       fetchAlertCount();
-      const interval = setInterval(fetchAlertCount, 30000); // 30s background refresh
-      return () => clearInterval(interval);
+
+      // Silent real-time poll every 2.5s
+      const interval = setInterval(fetchAlertCount, 2500);
+
+      // Instant cross-window update
+      const unsubscribe = onTelemetryUpdate(() => {
+        fetchAlertCount();
+      });
+
+      return () => {
+        clearInterval(interval);
+        unsubscribe();
+      };
     }
   }, [isAuthenticated]);
 

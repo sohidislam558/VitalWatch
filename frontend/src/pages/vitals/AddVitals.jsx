@@ -10,6 +10,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
 import Select from '../../components/common/Select';
 import toast from 'react-hot-toast';
+import { broadcastTelemetryUpdate } from '../../utils/realtime';
 
 export default function AddVitals() {
   const [searchParams] = useSearchParams();
@@ -84,6 +85,7 @@ export default function AddVitals() {
         toast.success('Vital signs recorded successfully. All values within normal boundaries.');
       }
 
+      broadcastTelemetryUpdate();
       navigate(`/patients/${patientData.id}`);
     } catch (err) {
       const msg = err.response?.data?.message || 'Failed to record vital signs.';

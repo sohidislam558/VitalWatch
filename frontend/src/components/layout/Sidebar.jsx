@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, Link } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
@@ -55,16 +55,23 @@ export default function Sidebar({ onClose }) {
 
   return (
     <div className="flex flex-col h-full bg-slate-900 text-slate-300 w-64 border-r border-slate-800">
-      {/* Brand Header */}
-      <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-800">
-        <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-md">
+      {/* Brand Header Linked to Landing Page */}
+      <Link
+        to="/"
+        onClick={onClose}
+        className="flex items-center gap-3 px-6 py-5 border-b border-slate-800 hover:bg-slate-800/50 transition-colors group cursor-pointer"
+        title="VitalWatch Home"
+      >
+        <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-md group-hover:scale-105 transition-transform">
           <Activity className="w-5 h-5 text-white" />
         </div>
         <div>
-          <h1 className="text-base font-bold text-white tracking-wide">VitalWatch</h1>
+          <h1 className="text-base font-bold text-white tracking-wide group-hover:text-blue-400 transition-colors">
+            VitalWatch
+          </h1>
           <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Hospital Monitor</p>
         </div>
-      </div>
+      </Link>
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">

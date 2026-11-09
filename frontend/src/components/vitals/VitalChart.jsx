@@ -39,17 +39,25 @@ export default function VitalChart({ records = [] }) {
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       const dataPoint = payload[0]?.payload;
+      // Sort items descending by value so that the hover order matches the lines from top to bottom of the graph
+      const sortedPayload = [...payload].sort((a, b) => {
+        const valA = typeof a.value === 'number' ? a.value : parseFloat(a.value) || 0;
+        const valB = typeof b.value === 'number' ? b.value : parseFloat(b.value) || 0;
+        return valB - valA;
+      });
+
       return (
-        <div className="bg-slate-900 text-white p-3 rounded-md shadow-lg text-xs space-y-1">
+        <div className="bg-slate-900 text-white p-3 rounded-md shadow-lg text-xs space-y-1 min-w-[210px]">
           <p className="font-semibold text-slate-300 border-b border-slate-700 pb-1 mb-1">
             {dataPoint?.fullDate || label}
           </p>
-          {payload.map((item, idx) => (
-            <div key={idx} className="flex justify-between gap-4">
-              <span style={{ color: item.color }} className="font-medium">
+          {sortedPayload.map((item, idx) => (
+            <div key={idx} className="flex justify-between gap-4 items-center">
+              <span style={{ color: item.color }} className="font-medium flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: item.color }} />
                 {item.name}:
               </span>
-              <span className="font-bold">{item.value}</span>
+              <span className="font-bold font-mono">{item.value}</span>
             </div>
           ))}
         </div>

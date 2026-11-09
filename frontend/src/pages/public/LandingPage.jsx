@@ -39,17 +39,17 @@ export default function LandingPage() {
       {/* Top Navigation */}
       <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+          <Link to="/" className="flex items-center gap-3 group cursor-pointer">
+            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 group-hover:scale-105 transition-transform">
               <Activity className="w-6 h-6 animate-pulse" />
             </div>
             <div>
-              <span className="text-xl font-bold tracking-tight text-slate-900">VitalWatch</span>
+              <span className="text-xl font-bold tracking-tight text-slate-900 group-hover:text-blue-600 transition-colors">VitalWatch</span>
               <span className="hidden sm:inline-block ml-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-blue-100 text-blue-700 rounded-full">
                 Hospital Telemetry
               </span>
             </div>
-          </div>
+          </Link>
 
           <div className="flex items-center gap-3">
             <Link
@@ -321,15 +321,15 @@ export default function LandingPage() {
       <footer className="mt-auto bg-slate-900 text-slate-400 py-10 border-t border-slate-800">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white">
+            <Link to="/" className="flex items-center gap-3 group cursor-pointer">
+              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white group-hover:scale-105 transition-transform">
                 <Activity className="w-4 h-4" />
               </div>
               <div>
-                <span className="text-white font-bold text-sm">VitalWatch</span>
+                <span className="text-white font-bold text-sm group-hover:text-blue-400 transition-colors">VitalWatch</span>
                 <span className="text-xs text-slate-400 ml-2">Hospital Early Warning Support System</span>
               </div>
-            </div>
+            </Link>
             <div className="text-xs text-slate-400 flex items-center gap-4">
               <Link to="/login" className="hover:text-white transition-colors">Portal Login</Link>
               <Link to="/register" className="hover:text-white transition-colors">Staff Registration</Link>

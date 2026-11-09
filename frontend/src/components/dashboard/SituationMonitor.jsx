@@ -30,6 +30,7 @@ import Modal from '../common/Modal';
 import LoadingSpinner from '../common/LoadingSpinner';
 import EmptyState from '../common/EmptyState';
 import { WARDS } from '../../utils/constants';
+import { broadcastTelemetryUpdate } from '../../utils/realtime';
 import toast from 'react-hot-toast';
 
 export default function SituationMonitor({
@@ -127,6 +128,7 @@ export default function SituationMonitor({
       setActionAlert(null);
       setActionPatient(null);
       setDoctorNote('');
+      broadcastTelemetryUpdate();
       refreshAlerts();
       if (onRefresh) onRefresh();
     } catch (err) {
@@ -149,6 +151,7 @@ export default function SituationMonitor({
     try {
       await alertService.markAssessmentDone(alertId);
       toast.success('Bedside assessment completed! Emergency resolved.');
+      broadcastTelemetryUpdate();
       refreshAlerts();
       if (onRefresh) onRefresh();
     } catch (err) {
@@ -202,6 +205,7 @@ export default function SituationMonitor({
         respiratory_rate: '',
         clinical_notes: '',
       });
+      broadcastTelemetryUpdate();
       refreshAlerts();
       if (onRefresh) onRefresh();
     } catch (err) {

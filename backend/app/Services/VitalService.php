@@ -111,7 +111,30 @@ class VitalService
                     default => false,
                 };
 
-                // If parameter is no longer breaching the rule, auto-resolve it!
+                // If doctor is in action, NEVER auto-resolve the alert!
+                // The emergency attendance window must stay until the physician explicitly completes assessment.
+                if ($existingAlert->status === 'doctor_in_action') {
+                    if (!$stillBreaching) {
+                        \App\Models\AlertAcknowledgement::create([
+                            'alert_id' => $existingAlert->id,
+                            'user_id' => $actor->id,
+                            'action' => 'doctor_in_action',
+                            'note' => "Patient Stabilizing: Follow-up {$param} normalized to safe level ({$currentVal}). Bedside treatment in progress.",
+                            'created_at' => now(),
+                        ]);
+                    } else {
+                        \App\Models\AlertAcknowledgement::create([
+                            'alert_id' => $existingAlert->id,
+                            'user_id' => $actor->id,
+                            'action' => 'doctor_in_action',
+                            'note' => "Bedside attendance update: {$param} currently at {$currentVal}.",
+                            'created_at' => now(),
+                        ]);
+                    }
+                    continue;
+                }
+
+                // If alert is unattended ('active'), auto-resolve when parameter returns to safe bounds
                 if (!$stillBreaching) {
                     $existingAlert->update(['status' => 'resolved']);
                     \App\Models\AlertAcknowledgement::create([

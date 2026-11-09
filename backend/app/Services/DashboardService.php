@@ -24,22 +24,24 @@ class DashboardService
             $q->has('vitalRecords');
         })->count();
 
-        $activeAlerts = Alert::whereIn('status', ['active', 'doctor_in_action'])->count();
-        $urgentAlerts = Alert::where('status', 'active')->where('priority', 'urgent')->count();
-        $doctorInActionAlerts = Alert::where('status', 'doctor_in_action')->count();
-        $reviewAlerts = Alert::where('status', 'active')->where('priority', 'review')->count();
-        $unacknowledgedAlerts = Alert::where('status', 'active')
+        // Unique patients with alarms (only one alarm per patient)
+        $activeAlertsPatients = Alert::whereIn('status', ['active', 'doctor_in_action'])->distinct('patient_id')->count('patient_id');
+        $urgentAlertsPatients = Alert::where('status', 'active')->where('priority', 'urgent')->distinct('patient_id')->count('patient_id');
+        $doctorInActionAlertsPatients = Alert::where('status', 'doctor_in_action')->distinct('patient_id')->count('patient_id');
+        $reviewAlertsPatients = Alert::where('status', 'active')->where('priority', 'review')->distinct('patient_id')->count('patient_id');
+        $unacknowledgedAlertsPatients = Alert::where('status', 'active')
             ->doesntHave('acknowledgements')
-            ->count();
+            ->distinct('patient_id')
+            ->count('patient_id');
 
         return [
             'total_admitted' => $totalAdmitted,
             'patients_with_vitals' => $patientsWithVitals,
-            'active_alerts' => $activeAlerts,
-            'urgent_alerts' => $urgentAlerts,
-            'doctor_in_action_alerts' => $doctorInActionAlerts,
-            'review_alerts' => $reviewAlerts,
-            'unacknowledged_alerts' => $unacknowledgedAlerts,
+            'active_alerts' => $activeAlertsPatients,
+            'urgent_alerts' => $urgentAlertsPatients,
+            'doctor_in_action_alerts' => $doctorInActionAlertsPatients,
+            'review_alerts' => $reviewAlertsPatients,
+            'unacknowledged_alerts' => $unacknowledgedAlertsPatients,
         ];
     }
 
@@ -86,10 +88,46 @@ class DashboardService
                 $doctorText = $ackDoctor ? "Dr. {$ackDoctor}" : "Attending Doctor";
 
                 $status = 'doctor_in_action';
-                $statusLabel = 'Doctor in Action';
                 $combined = $doctorInActionAlerts->pluck('message')->unique()->implode(' • ');
-                $situationDescription = "{$doctorText} is actively attending bedside to manage: {$combined}";
-                $badgeColor = 'blue';
+
+                // Check if current vitals are stabilizing or worsening
+                $hasBreach = false;
+                if ($vitals) {
+                    $activeRules = \App\Models\AlertRule::where('is_active', true)->get();
+                    foreach ($activeRules as $rule) {
+                        $p = $rule->parameter;
+                        if (isset($vitals->$p)) {
+                            $v = (float) $vitals->$p;
+                            $t = (float) $rule->threshold_value;
+                            $breached = match ($rule->operator) {
+                                'greater_than' => $v > $t,
+                                'greater_than_or_equal' => $v >= $t,
+                                'less_than' => $v < $t,
+                                'less_than_or_equal' => $v <= $t,
+                                'equal_to' => abs($v - $t) < 0.001,
+                                default => false,
+                            };
+                            if ($breached) {
+                                $hasBreach = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if ($vitals && !$hasBreach) {
+                    $statusLabel = 'Doctor in Action: Patient Stabilizing';
+                    $situationDescription = "{$doctorText} attending bedside: Patient Stabilizing. Latest vitals (HR: {$vitals->heart_rate} bpm, BP: {$vitals->systolic_bp}/{$vitals->diastolic_bp}, SpO2: {$vitals->spo2}%) normalized to safe bounds. Awaiting final assessment completion.";
+                    $badgeColor = 'blue';
+                } elseif ($hasBreach) {
+                    $statusLabel = 'Doctor in Action: Critical Deterioration';
+                    $situationDescription = "{$doctorText} attending bedside: Critical Deterioration detected ({$combined})! Continued bedside intervention required.";
+                    $badgeColor = 'red';
+                } else {
+                    $statusLabel = 'Doctor in Action';
+                    $situationDescription = "{$doctorText} is actively attending bedside to manage: {$combined}";
+                    $badgeColor = 'blue';
+                }
             } elseif ($urgentAlerts->isNotEmpty()) {
                 $status = 'emergency';
                 $statusLabel = 'Emergency Attention';

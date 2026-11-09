@@ -4,6 +4,7 @@ import { dashboardService } from '../../services/settingsService';
 import { useAuth } from '../../hooks/useAuth';
 import PageContainer from '../../components/layout/PageContainer';
 import SituationMonitor from '../../components/dashboard/SituationMonitor';
+import { onTelemetryUpdate } from '../../utils/realtime';
 import {
   ShieldCheck,
   Activity,
@@ -57,6 +58,20 @@ export default function AdminPortal() {
 
   useEffect(() => {
     loadData();
+
+    // Silent background real-time sync every 2.5s
+    const interval = setInterval(() => {
+      loadData(true);
+    }, 2500);
+
+    const unsubscribe = onTelemetryUpdate(() => {
+      loadData(true);
+    });
+
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
   }, [loadData]);
 
   return (

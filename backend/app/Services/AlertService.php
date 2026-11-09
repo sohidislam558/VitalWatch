@@ -58,14 +58,36 @@ class AlertService
 
             $message = str_replace('{val}', (string)$val, $rule->message_template);
 
+            $isPatientUnderDoctorCare = Alert::where('patient_id', $vitalRecord->patient_id)
+                ->where('status', 'doctor_in_action')
+                ->first();
+
+            $initialStatus = $isPatientUnderDoctorCare ? 'doctor_in_action' : 'active';
+
             $alert = Alert::create([
                 'patient_id' => $vitalRecord->patient_id,
                 'vital_record_id' => $vitalRecord->id,
                 'alert_rule_id' => $rule->id,
                 'message' => $message,
                 'priority' => $rule->priority,
-                'status' => 'active',
+                'status' => $initialStatus,
             ]);
+
+            if ($isPatientUnderDoctorCare) {
+                $attendingAck = $isPatientUnderDoctorCare->acknowledgements()
+                    ->where('action', 'doctor_in_action')
+                    ->latest()
+                    ->first();
+                if ($attendingAck) {
+                    AlertAcknowledgement::create([
+                        'alert_id' => $alert->id,
+                        'user_id' => $attendingAck->user_id,
+                        'action' => 'doctor_in_action',
+                        'note' => "Attached to active bedside case: Critical alarm triggered during treatment.",
+                        'created_at' => now(),
+                    ]);
+                }
+            }
 
             $this->auditService->log(
                 action: 'ALERT_GENERATED',
