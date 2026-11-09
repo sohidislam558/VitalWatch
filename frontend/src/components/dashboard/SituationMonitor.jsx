@@ -4,6 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useNotification } from '../../context/NotificationContext';
 import { alertService } from '../../services/alertService';
 import { vitalService } from '../../services/vitalService';
+import { admissionService } from '../../services/admissionService';
 import {
   Activity,
   Heart,
@@ -54,6 +55,15 @@ export default function SituationMonitor({
   const [doctorNote, setDoctorNote] = useState('');
   const [actionSubmitting, setActionSubmitting] = useState(false);
   const [assessmentSubmitting, setAssessmentSubmitting] = useState(false);
+
+  // Emergency ICU Transfer states
+  const [icuTransferPatient, setIcuTransferPatient] = useState(null);
+  const [icuTransferWard, setIcuTransferWard] = useState('Intensive Care Unit (ICU)');
+  const [icuTransferBed, setIcuTransferBed] = useState('');
+  const [icuAvailableBeds, setIcuAvailableBeds] = useState([]);
+  const [icuLoadingBeds, setIcuLoadingBeds] = useState(false);
+  const [icuSubmitting, setIcuSubmitting] = useState(false);
+  const [requestingIcuId, setRequestingIcuId] = useState(null);
 
   // Quick Vital Entry Modal state (for Nurse / Admin)
   const [vitalEntryPatient, setVitalEntryPatient] = useState(null);
@@ -158,6 +168,84 @@ export default function SituationMonitor({
       toast.error(err.response?.data?.message || 'Failed to complete assessment.');
     } finally {
       setAssessmentSubmitting(false);
+    }
+  };
+
+  // 1-Click: Doctor requests Immediate Emergency ICU Transfer
+  const handleRequestIcuTransfer = async (patient) => {
+    const admissionId = patient.active_admission?.id;
+    if (!admissionId) {
+      toast.error('No active admission found for this patient.');
+      return;
+    }
+
+    setRequestingIcuId(patient.id);
+    try {
+      await admissionService.requestIcuTransfer(admissionId, {
+        notes: `Immediate ICU transfer requested by Dr. ${user?.name || 'Physician'}. Patient condition deteriorating.`,
+        target_ward: 'Intensive Care Unit (ICU)',
+      });
+      toast.success(
+        '🚨 Emergency ICU transfer requested! Ward nurses and administration alerted.',
+        { duration: 6000 }
+      );
+      broadcastTelemetryUpdate();
+      refreshAlerts();
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to request ICU transfer.');
+    } finally {
+      setRequestingIcuId(null);
+    }
+  };
+
+  // Open ICU Bed Allocation Modal (Nurse / Admin)
+  const openIcuTransferModal = (patient) => {
+    setIcuTransferPatient(patient);
+    const targetWard = patient.active_admission?.target_icu_ward || 'Intensive Care Unit (ICU)';
+    setIcuTransferWard(targetWard);
+    fetchIcuBeds(targetWard);
+  };
+
+  const fetchIcuBeds = async (ward) => {
+    setIcuLoadingBeds(true);
+    try {
+      const res = await admissionService.getBeds(ward);
+      const available = res.data?.available_beds || [];
+      setIcuAvailableBeds(available);
+      setIcuTransferBed(available[0] || '');
+    } catch {
+      toast.error('Failed to load available ICU beds.');
+    } finally {
+      setIcuLoadingBeds(false);
+    }
+  };
+
+  const handleCompleteIcuTransfer = async (e) => {
+    e.preventDefault();
+    if (!icuTransferPatient || !icuTransferBed) {
+      toast.error('Please select an available ICU bed.');
+      return;
+    }
+
+    setIcuSubmitting(true);
+    try {
+      await admissionService.completeIcuTransfer(icuTransferPatient.active_admission?.id, {
+        ward: icuTransferWard,
+        bed_number: icuTransferBed,
+      });
+      toast.success(
+        `Patient ${icuTransferPatient.name} successfully transferred to ${icuTransferWard} (${icuTransferBed})!`,
+        { duration: 6000 }
+      );
+      setIcuTransferPatient(null);
+      broadcastTelemetryUpdate();
+      refreshAlerts();
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to complete ICU transfer.');
+    } finally {
+      setIcuSubmitting(false);
     }
   };
 
@@ -369,6 +457,40 @@ export default function SituationMonitor({
           </div>
         </div>
       </div>
+
+      {/* PENDING EMERGENCY ICU TRANSFERS BANNER */}
+      {patients.filter((p) => p.active_admission?.icu_transfer_requested).length > 0 && (
+        <div className="p-4 rounded-xl bg-gradient-to-r from-red-600 to-rose-700 text-white shadow-lg shadow-red-600/25 border border-red-500 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-pulse">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white text-lg flex-shrink-0">
+              🚑
+            </div>
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wider text-red-200">
+                🚨 Immediate Action Required: Emergency ICU Bed Allocation
+              </div>
+              <div className="text-sm font-extrabold text-white mt-0.5">
+                {patients
+                  .filter((p) => p.active_admission?.icu_transfer_requested)
+                  .map((p) => (
+                    <span key={p.id} className="mr-3">
+                      {p.name} ({p.active_admission?.ward}, Bed {p.active_admission?.bed_number})
+                    </span>
+                  ))}
+              </div>
+            </div>
+          </div>
+          {(isNurse || isAdmin) && (
+            <button
+              type="button"
+              onClick={() => openIcuTransferModal(patients.find((p) => p.active_admission?.icu_transfer_requested))}
+              className="px-3.5 py-2 rounded-lg bg-white text-red-700 hover:bg-red-50 text-xs font-bold shadow-md flex-shrink-0 cursor-pointer transition-colors"
+            >
+              Allocate ICU Bed Now
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Patient Situation Cards Grid */}
       {filteredPatients.length === 0 ? (
@@ -593,17 +715,35 @@ export default function SituationMonitor({
                     {/* DOCTOR ACTIONS */}
                     {canTakeDoctorAction && (
                       <>
-                        {/* 1. If THIS doctor is currently attending this patient, show "Assessment Done" button */}
+                        {/* 1. If THIS doctor is currently attending this patient, show "Assessment Done" + "Request ICU Transfer" buttons */}
                         {isAttendingThisPatient && (
-                          <button
-                            type="button"
-                            onClick={() => handleAssessmentDone(myAttendingAlert.id)}
-                            disabled={assessmentSubmitting}
-                            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-500/20 flex items-center gap-1.5 transition-all hover:scale-105"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>{assessmentSubmitting ? 'Resolving...' : '✅ Assessment Done'}</span>
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            {!patient.active_admission?.icu_transfer_requested ? (
+                              <button
+                                type="button"
+                                onClick={() => handleRequestIcuTransfer(patient)}
+                                disabled={requestingIcuId === patient.id}
+                                className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md shadow-rose-500/20 flex items-center gap-1.5 transition-all hover:scale-105 cursor-pointer"
+                                title="Patient condition deteriorating: Request emergency ICU bed"
+                              >
+                                <span>🚑 Request ICU</span>
+                              </button>
+                            ) : (
+                              <span className="px-2 py-1 rounded-lg bg-red-100 text-red-700 text-[11px] font-bold border border-red-300 flex items-center gap-1 animate-pulse">
+                                <span>🚨 ICU Requested</span>
+                              </span>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => handleAssessmentDone(myAttendingAlert.id)}
+                              disabled={assessmentSubmitting}
+                              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-500/20 flex items-center gap-1.5 transition-all hover:scale-105 cursor-pointer"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>{assessmentSubmitting ? 'Resolving...' : '✅ Assessment Done'}</span>
+                            </button>
+                          </div>
                         )}
 
                         {/* 2. If this patient has an active emergency alarm */}
@@ -642,6 +782,18 @@ export default function SituationMonitor({
                           </span>
                         )}
                       </>
+                    )}
+
+                    {/* NURSE / ADMIN ICU BED ALLOCATION BUTTON */}
+                    {(isNurse || isAdmin) && patient.active_admission?.icu_transfer_requested && (
+                      <button
+                        type="button"
+                        onClick={() => openIcuTransferModal(patient)}
+                        className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md shadow-rose-500/30 flex items-center gap-1.5 animate-pulse transition-all hover:scale-105 cursor-pointer"
+                      >
+                        <Bed className="w-3.5 h-3.5" />
+                        <span>🚑 Allocate ICU Bed</span>
+                      </button>
                     )}
 
                     {/* NURSE / ADMIN QUICK VITAL ENTRY BUTTON */}
@@ -874,6 +1026,97 @@ export default function SituationMonitor({
               </Button>
               <Button type="submit" variant="primary" loading={vitalSubmitting}>
                 Save Vital Signs & Update Status
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Emergency ICU Bed Allocation Modal (Nurse / Admin) */}
+      {icuTransferPatient && (
+        <Modal
+          isOpen={!!icuTransferPatient}
+          onClose={() => setIcuTransferPatient(null)}
+          title="🚑 Emergency ICU Bed Allocation & Transfer"
+        >
+          <form onSubmit={handleCompleteIcuTransfer} className="space-y-4">
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-800 space-y-1">
+              <div className="font-bold flex items-center gap-1.5 text-sm text-red-900">
+                <span>🚨 Immediate ICU Upgrade Requested</span>
+              </div>
+              <p>
+                Attending Physician requested urgent ICU bed allocation for{' '}
+                <strong className="text-slate-900">{icuTransferPatient.name}</strong> ({icuTransferPatient.patient_code}).
+              </p>
+              <p className="text-slate-600">
+                Current Location: {icuTransferPatient.active_admission?.ward} • Bed {icuTransferPatient.active_admission?.bed_number}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Target ICU Ward
+              </label>
+              <select
+                value={icuTransferWard}
+                onChange={(e) => {
+                  setIcuTransferWard(e.target.value);
+                  fetchIcuBeds(e.target.value);
+                }}
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-800"
+              >
+                <option value="Intensive Care Unit (ICU)">Intensive Care Unit (ICU)</option>
+                <option value="Cardiology ICU">Cardiology ICU</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Available ICU Bed
+              </label>
+              {icuLoadingBeds ? (
+                <div className="py-2 text-xs text-slate-500 flex items-center gap-2">
+                  <LoadingSpinner size="sm" />
+                  <span>Checking available ICU beds...</span>
+                </div>
+              ) : icuAvailableBeds.length === 0 ? (
+                <div className="p-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg">
+                  No vacant beds in {icuTransferWard}. Please select another ICU ward or discharge an occupant.
+                </div>
+              ) : (
+                <select
+                  value={icuTransferBed}
+                  onChange={(e) => setIcuTransferBed(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-slate-800"
+                  required
+                >
+                  {icuAvailableBeds.map((bed) => (
+                    <option key={bed} value={bed}>
+                      {bed} (Available)
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                onClick={() => setIcuTransferPatient(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                type="submit"
+                loading={icuSubmitting}
+                disabled={!icuTransferBed || icuAvailableBeds.length === 0}
+                className="bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer"
+              >
+                Confirm ICU Bed Transfer
               </Button>
             </div>
           </form>

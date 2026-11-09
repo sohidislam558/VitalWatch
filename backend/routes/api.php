@@ -57,6 +57,9 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('/admissions', [AdmissionController::class, 'store']);
     Route::get('/admissions/{id}', [AdmissionController::class, 'show']);
     Route::patch('/admissions/{id}/discharge', [AdmissionController::class, 'discharge']);
+    Route::post('/admissions/{id}/request-icu-transfer', [AdmissionController::class, 'requestIcuTransfer']);
+    Route::post('/admissions/{id}/complete-icu-transfer', [AdmissionController::class, 'completeIcuTransfer']);
+    Route::post('/admissions/{id}/cancel-icu-transfer', [AdmissionController::class, 'cancelIcuTransfer']);
 
     // Vital Records
     Route::get('/vitals', [VitalController::class, 'index']);
@@ -68,6 +71,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::get('/alerts/{id}', [AlertController::class, 'show']);
     Route::patch('/alerts/{id}/doctor-in-action', [AlertController::class, 'doctorInAction']);
     Route::patch('/alerts/{id}/assessment-done', [AlertController::class, 'assessmentDone']);
+    Route::post('/alerts/{id}/request-icu-transfer', [AlertController::class, 'requestIcuTransfer']);
     Route::patch('/alerts/{id}/acknowledge', [AlertController::class, 'acknowledge']);
     Route::patch('/alerts/{id}/resolve', [AlertController::class, 'resolve']);
     Route::get('/alerts/{id}/history', [AlertController::class, 'history']);

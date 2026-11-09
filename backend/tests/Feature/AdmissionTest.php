@@ -96,4 +96,53 @@ class AdmissionTest extends TestCase
 
         $this->assertEquals('discharged', $admission->fresh()->status);
     }
+
+    public function test_doctor_can_request_emergency_icu_transfer_and_nurse_can_complete(): void
+    {
+        // Patient admitted in General Medical Ward, Bed 201
+        [$patient, $admission] = $this->createTestPatient('General Medical Ward', 'Bed 201');
+
+        // 1. Doctor requests Emergency ICU Transfer
+        $docHeaders = $this->getAuthHeader('doctor');
+        $transferReq = $this->withHeaders($docHeaders)
+            ->postJson("/api/admissions/{$admission->id}/request-icu-transfer", [
+                'target_ward' => 'Intensive Care Unit (ICU)',
+                'notes' => 'Patient deteriorating rapidly with severe respiratory distress. Urgent ICU bed needed.',
+            ]);
+
+        $transferReq->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'icu_transfer_requested' => true,
+                    'target_icu_ward' => 'Intensive Care Unit (ICU)',
+                ],
+            ]);
+
+        $this->assertTrue($admission->fresh()->icu_transfer_requested);
+
+        // 2. Nurse allocates available ICU bed to complete transfer
+        auth()->forgetGuards();
+        $nurseHeaders = $this->getAuthHeader('nurse');
+        $completeReq = $this->withHeaders($nurseHeaders)
+            ->postJson("/api/admissions/{$admission->id}/complete-icu-transfer", [
+                'ward' => 'Intensive Care Unit (ICU)',
+                'bed_number' => 'ICU-03',
+            ]);
+
+        $completeReq->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'ward' => 'Intensive Care Unit (ICU)',
+                    'bed_number' => 'ICU-03',
+                    'icu_transfer_requested' => false,
+                ],
+            ]);
+
+        $fresh = $admission->fresh();
+        $this->assertEquals('Intensive Care Unit (ICU)', $fresh->ward);
+        $this->assertEquals('ICU-03', $fresh->bed_number);
+        $this->assertFalse($fresh->icu_transfer_requested);
+    }
 }

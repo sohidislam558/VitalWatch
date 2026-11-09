@@ -26,5 +26,20 @@ export const admissionService = {
     const response = await api.patch(`/admissions/${id}/discharge`);
     return response.data;
   },
+
+  async requestIcuTransfer(id, data = {}) {
+    const response = await api.post(`/admissions/${id}/request-icu-transfer`, data);
+    return response.data;
+  },
+
+  async completeIcuTransfer(id, data) {
+    const response = await api.post(`/admissions/${id}/complete-icu-transfer`, data);
+    return response.data;
+  },
+
+  async cancelIcuTransfer(id) {
+    const response = await api.post(`/admissions/${id}/cancel-icu-transfer`);
+    return response.data;
+  },
 };
 

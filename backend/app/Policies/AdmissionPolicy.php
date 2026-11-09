@@ -28,5 +28,15 @@ class AdmissionPolicy
         // Only doctors can formally discharge an admitted patient
         return $user->role === 'doctor' && $admission->status === 'admitted';
     }
+
+    public function requestIcuTransfer(User $user, Admission $admission): bool
+    {
+        return in_array($user->role, ['doctor', 'admin'], true) && $admission->status === 'admitted';
+    }
+
+    public function completeIcuTransfer(User $user, Admission $admission): bool
+    {
+        return in_array($user->role, ['nurse', 'admin', 'doctor'], true) && $admission->status === 'admitted';
+    }
 }
 

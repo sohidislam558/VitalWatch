@@ -18,6 +18,11 @@ class Admission extends Model
         'admitted_at',
         'discharged_at',
         'status',
+        'icu_transfer_requested',
+        'icu_transfer_requested_at',
+        'icu_transfer_requested_by',
+        'target_icu_ward',
+        'icu_transfer_notes',
     ];
 
     protected function casts(): array
@@ -25,7 +30,14 @@ class Admission extends Model
         return [
             'admitted_at' => 'datetime',
             'discharged_at' => 'datetime',
+            'icu_transfer_requested' => 'boolean',
+            'icu_transfer_requested_at' => 'datetime',
         ];
+    }
+
+    public function icuTransferRequester(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'icu_transfer_requested_by');
     }
 
     public function patient(): BelongsTo

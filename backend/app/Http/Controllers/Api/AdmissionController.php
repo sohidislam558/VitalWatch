@@ -106,5 +106,81 @@ class AdmissionController extends Controller
             'data' => $discharged,
         ]);
     }
+
+    /**
+     * Request an emergency ICU transfer.
+     */
+    public function requestIcuTransfer(Request $request, int $id): JsonResponse
+    {
+        $admission = Admission::with('patient')->findOrFail($id);
+        $this->authorize('requestIcuTransfer', $admission);
+
+        $request->validate([
+            'notes' => ['nullable', 'string', 'max:1000'],
+            'target_ward' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        $updated = $this->admissionService->requestIcuTransfer(
+            $admission,
+            $request->user(),
+            $request->input('notes'),
+            $request->input('target_ward', 'Intensive Care Unit (ICU)')
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Emergency ICU transfer requested. Hospital staff and ICU notified.',
+            'data' => $updated,
+        ]);
+    }
+
+    /**
+     * Complete an emergency ICU transfer by assigning an available ICU bed.
+     */
+    public function completeIcuTransfer(Request $request, int $id): JsonResponse
+    {
+        $admission = Admission::with('patient')->findOrFail($id);
+        $this->authorize('completeIcuTransfer', $admission);
+
+        $request->validate([
+            'ward' => ['required', 'string', 'max:100'],
+            'bed_number' => ['required', 'string', 'max:50'],
+        ]);
+
+        $updated = $this->admissionService->completeIcuTransfer(
+            $admission,
+            $request->user(),
+            $request->input('ward'),
+            $request->input('bed_number'),
+            $request->ip()
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => "Patient successfully transferred to {$updated->ward} ({$updated->bed_number}).",
+            'data' => $updated,
+        ]);
+    }
+
+    /**
+     * Cancel / revoke an emergency ICU transfer request.
+     */
+    public function cancelIcuTransfer(Request $request, int $id): JsonResponse
+    {
+        $admission = Admission::with('patient')->findOrFail($id);
+        $this->authorize('requestIcuTransfer', $admission);
+
+        $updated = $this->admissionService->cancelIcuTransfer(
+            $admission,
+            $request->user(),
+            $request->ip()
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Emergency ICU transfer request cancelled.',
+            'data' => $updated,
+        ]);
+    }
 }
 

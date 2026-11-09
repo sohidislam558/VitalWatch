@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { dashboardService } from '../../services/settingsService';
 import { alertService } from '../../services/alertService';
+import { admissionService } from '../../services/admissionService';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotification } from '../../context/NotificationContext';
 import { onTelemetryUpdate, broadcastTelemetryUpdate } from '../../utils/realtime';
@@ -13,6 +14,7 @@ import {
   CheckCircle2,
   RefreshCw,
   HeartPulse,
+  AlertTriangle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -25,6 +27,7 @@ export default function DoctorPortal() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [assessmentSubmitting, setAssessmentSubmitting] = useState(false);
+  const [icuTransferSubmitting, setIcuTransferSubmitting] = useState(false);
 
   const loadData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -97,6 +100,34 @@ export default function DoctorPortal() {
       toast.error(err.response?.data?.message || 'Failed to complete assessment.');
     } finally {
       setAssessmentSubmitting(false);
+    }
+  };
+
+  // 1-Click: Request Immediate ICU Transfer
+  const handleRequestIcuTransfer = async () => {
+    const admissionId = currentAttendingPatient?.active_admission?.id;
+    if (!admissionId) {
+      toast.error('No active admission found for this patient.');
+      return;
+    }
+
+    setIcuTransferSubmitting(true);
+    try {
+      await admissionService.requestIcuTransfer(admissionId, {
+        notes: `Immediate ICU transfer requested by Dr. ${user?.name || 'Physician'}. Critical bedside deterioration.`,
+        target_ward: 'Intensive Care Unit (ICU)',
+      });
+      toast.success(
+        '🚨 Emergency ICU transfer requested! Ward nurses and hospital administration alerted.',
+        { duration: 6000 }
+      );
+      broadcastTelemetryUpdate();
+      refreshAlerts();
+      loadData(true);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to request ICU transfer.');
+    } finally {
+      setIcuTransferSubmitting(false);
     }
   };
 
@@ -183,19 +214,38 @@ export default function DoctorPortal() {
               </div>
             </div>
 
-            <div className="flex flex-col items-stretch sm:items-end gap-1.5 self-stretch sm:self-auto">
-              <Button
-                variant="primary"
-                size="lg"
-                loading={assessmentSubmitting}
-                onClick={() => handleAssessmentDone(myAttendingAlerts[0]?.id)}
-                className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-6 py-3 rounded-xl shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 text-sm"
-              >
-                <CheckCircle2 className="w-5 h-5" />
-                <span>Assessment Done</span>
-              </Button>
+            <div className="flex flex-col items-stretch sm:items-end gap-2 self-stretch sm:self-auto">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* 1-Click: Emergency ICU Transfer Request */}
+                {!currentAttendingPatient.active_admission?.icu_transfer_requested ? (
+                  <Button
+                    variant="danger"
+                    size="md"
+                    loading={icuTransferSubmitting}
+                    onClick={handleRequestIcuTransfer}
+                    className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-lg shadow-rose-600/30 flex items-center justify-center gap-1.5 text-xs hover:scale-105 transition-all cursor-pointer"
+                  >
+                    <span>🚑 Request ICU Transfer</span>
+                  </Button>
+                ) : (
+                  <div className="px-3 py-2 rounded-xl bg-red-500/30 border border-red-400 text-red-100 text-xs font-bold flex items-center gap-1.5 animate-pulse shadow-sm">
+                    <span>🚨 ICU Transfer Requested (Awaiting Bed)</span>
+                  </div>
+                )}
+
+                <Button
+                  variant="primary"
+                  size="md"
+                  loading={assessmentSubmitting}
+                  onClick={() => handleAssessmentDone(myAttendingAlerts[0]?.id)}
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-5 py-2.5 rounded-xl shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-1.5 text-xs hover:scale-105 transition-all cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Assessment Done</span>
+                </Button>
+              </div>
               <span className="text-[10px] text-slate-300 text-center sm:text-right">
-                1-click completion: resolves all alarms for this patient
+                1-click emergency escalation & assessment disposition
               </span>
             </div>
           </div>

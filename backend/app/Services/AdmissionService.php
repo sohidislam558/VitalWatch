@@ -11,8 +11,10 @@ use Illuminate\Validation\ValidationException;
 
 class AdmissionService
 {
-    public function __construct(protected AuditService $auditService)
-    {
+    public function __construct(
+        protected AuditService $auditService,
+        protected EmailNotificationService $emailService
+    ) {
     }
 
     /**
@@ -205,6 +207,119 @@ class AdmissionService
             'available_beds' => ['Bed 101', 'Bed 102', 'Bed 103', 'Bed 104', 'Bed 105', 'Bed 106', 'Bed 107', 'Bed 108', 'Bed 109', 'Bed 110'],
             'occupied_beds' => [],
         ]) : $result;
+    }
+
+    /**
+     * Request an emergency ICU transfer for an admitted patient.
+     */
+    public function requestIcuTransfer(Admission $admission, User $requester, ?string $notes = null, ?string $targetWard = 'Intensive Care Unit (ICU)'): Admission
+    {
+        return DB::transaction(function () use ($admission, $requester, $notes, $targetWard) {
+            $admission->update([
+                'icu_transfer_requested' => true,
+                'icu_transfer_requested_at' => now(),
+                'icu_transfer_requested_by' => $requester->id,
+                'target_icu_ward' => $targetWard ?: 'Intensive Care Unit (ICU)',
+                'icu_transfer_notes' => $notes ?: "Immediate ICU transfer requested by Dr. {$requester->name}. Critical bedside condition.",
+            ]);
+
+            $this->auditService->log(
+                action: 'EMERGENCY_ICU_TRANSFER_REQUESTED',
+                entityType: Admission::class,
+                entityId: $admission->id,
+                details: [
+                    'patient_id' => $admission->patient_id,
+                    'patient_name' => $admission->patient?->name,
+                    'current_ward' => $admission->ward,
+                    'current_bed' => $admission->bed_number,
+                    'target_ward' => $admission->target_icu_ward,
+                    'requester_id' => $requester->id,
+                    'requester_name' => $requester->name,
+                    'notes' => $admission->icu_transfer_notes,
+                ],
+                user: $requester
+            );
+
+            // Send instant emergency notification
+            $this->emailService->sendIcuTransferNotification($admission, $requester);
+
+            return $admission->fresh(['patient', 'icuTransferRequester']);
+        });
+    }
+
+    /**
+     * Complete an emergency ICU transfer by assigning an available ICU bed.
+     */
+    public function completeIcuTransfer(Admission $admission, User $actor, string $newWard, string $newBed, string $ip): Admission
+    {
+        return DB::transaction(function () use ($admission, $actor, $newWard, $newBed, $ip) {
+            // Verify new bed is available
+            $bedOccupied = Admission::where('ward', $newWard)
+                ->where('bed_number', $newBed)
+                ->where('status', 'admitted')
+                ->where('id', '!=', $admission->id)
+                ->with('patient')
+                ->first();
+
+            if ($bedOccupied) {
+                $occupant = $bedOccupied->patient?->name ?? 'another patient';
+                throw ValidationException::withMessages([
+                    'bed_number' => ["Bed '{$newBed}' in '{$newWard}' is currently occupied by {$occupant}. Please select an available bed."],
+                ]);
+            }
+
+            $oldWard = $admission->ward;
+            $oldBed = $admission->bed_number;
+
+            $admission->update([
+                'ward' => $newWard,
+                'bed_number' => $newBed,
+                'icu_transfer_requested' => false,
+                'icu_transfer_notes' => "Transfer completed from {$oldWard} ({$oldBed}) to {$newWard} ({$newBed}) by {$actor->name}.",
+            ]);
+
+            $this->auditService->log(
+                action: 'PATIENT_TRANSFERRED_TO_ICU',
+                entityType: Admission::class,
+                entityId: $admission->id,
+                details: [
+                    'patient_id' => $admission->patient_id,
+                    'from_ward' => $oldWard,
+                    'from_bed' => $oldBed,
+                    'to_ward' => $newWard,
+                    'to_bed' => $newBed,
+                    'transferred_by' => $actor->name,
+                ],
+                user: $actor,
+                ipAddress: $ip
+            );
+
+            return $admission->fresh(['patient', 'icuTransferRequester']);
+        });
+    }
+
+    /**
+     * Cancel / revoke an ICU transfer request.
+     */
+    public function cancelIcuTransfer(Admission $admission, User $actor, string $ip): Admission
+    {
+        $admission->update([
+            'icu_transfer_requested' => false,
+        ]);
+
+        $this->auditService->log(
+            action: 'ICU_TRANSFER_REQUEST_CANCELLED',
+            entityType: Admission::class,
+            entityId: $admission->id,
+            details: [
+                'patient_id' => $admission->patient_id,
+                'cancelled_by' => $actor->name,
+            ],
+            user: $actor,
+            ipAddress: $ip
+        );
+
+        return $admission->fresh(['patient']);
     }
 }
 

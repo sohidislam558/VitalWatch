@@ -129,6 +129,40 @@ class AlertController extends Controller
     }
 
     /**
+     * Request an immediate emergency ICU transfer for the alert's patient.
+     */
+    public function requestIcuTransfer(Request $request, int $id): JsonResponse
+    {
+        $alert = Alert::with('patient.activeAdmission')->findOrFail($id);
+        $this->authorize('doctorInAction', $alert);
+
+        $admission = $alert->patient?->activeAdmission;
+        if (!$admission) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No active hospital admission record found for this patient.',
+            ], 422);
+        }
+
+        $admissionService = app(\App\Services\AdmissionService::class);
+        $updatedAdmission = $admissionService->requestIcuTransfer(
+            $admission,
+            $request->user(),
+            $request->input('note'),
+            $request->input('target_ward', 'Intensive Care Unit (ICU)')
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Emergency ICU transfer requested. Hospital staff and ICU notified.',
+            'data' => [
+                'admission' => $updatedAdmission,
+                'alert' => $alert,
+            ],
+        ]);
+    }
+
+    /**
      * Acknowledge alert with optional clinical note.
      */
     public function acknowledge(Request $request, int $id): JsonResponse

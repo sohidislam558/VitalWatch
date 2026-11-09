@@ -21,6 +21,11 @@ export const alertService = {
     return response.data;
   },
 
+  async requestIcuTransfer(id, data = {}) {
+    const response = await api.post(`/alerts/${id}/request-icu-transfer`, data);
+    return response.data;
+  },
+
   async acknowledgeAlert(id, note = '') {
     const response = await api.patch(`/alerts/${id}/acknowledge`, { note });
     return response.data;

@@ -52,7 +52,7 @@ class DashboardService
     {
         $query = Patient::whereHas('activeAdmission')
             ->with([
-                'activeAdmission',
+                'activeAdmission.icuTransferRequester',
                 'latestVitalRecord.recorder',
                 'alerts' => fn($q) => $q->whereIn('status', ['active', 'doctor_in_action'])->with(['alertRule', 'acknowledgements.user']),
             ])
@@ -115,7 +115,14 @@ class DashboardService
                     }
                 }
 
-                if ($vitals && !$hasBreach) {
+                $isIcuTransferRequested = (bool) ($patient->activeAdmission?->icu_transfer_requested);
+                $targetIcu = $patient->activeAdmission?->target_icu_ward ?: 'Intensive Care Unit (ICU)';
+
+                if ($isIcuTransferRequested) {
+                    $statusLabel = 'Doctor in Action: Emergency ICU Transfer Requested';
+                    $situationDescription = "🚨 EMERGENCY ICU TRANSFER REQUESTED by {$doctorText}! Patient deteriorating. Immediate transfer to {$targetIcu} required. Awaiting ICU bed allocation.";
+                    $badgeColor = 'red';
+                } elseif ($vitals && !$hasBreach) {
                     $statusLabel = 'Doctor in Action: Patient Stabilizing';
                     $situationDescription = "{$doctorText} attending bedside: Patient Stabilizing. Latest vitals (HR: {$vitals->heart_rate} bpm, BP: {$vitals->systolic_bp}/{$vitals->diastolic_bp}, SpO2: {$vitals->spo2}%) normalized to safe bounds. Awaiting final assessment completion.";
                     $badgeColor = 'blue';
@@ -128,6 +135,12 @@ class DashboardService
                     $situationDescription = "{$doctorText} is actively attending bedside to manage: {$combined}";
                     $badgeColor = 'blue';
                 }
+            } elseif ($patient->activeAdmission?->icu_transfer_requested) {
+                $status = 'emergency';
+                $statusLabel = 'Emergency ICU Transfer Requested';
+                $targetIcu = $patient->activeAdmission?->target_icu_ward ?: 'Intensive Care Unit (ICU)';
+                $situationDescription = "🚨 EMERGENCY ICU TRANSFER REQUESTED: Patient deteriorating. Immediate bed allocation in {$targetIcu} required.";
+                $badgeColor = 'red';
             } elseif ($urgentAlerts->isNotEmpty()) {
                 $status = 'emergency';
                 $statusLabel = 'Emergency Attention';
@@ -213,6 +226,9 @@ class DashboardService
                     'PATIENT_REGISTERED' => "Staff {$userName} registered patient '{$patientName}' ({$patientCode})",
                     'PATIENT_ADMITTED' => "Patient admitted to {$ward} (Bed {$bed}) by {$userName}",
                     'PATIENT_DISCHARGED' => "Patient discharged from {$ward} by {$userName}",
+                    'EMERGENCY_ICU_TRANSFER_REQUESTED' => "Dr. {$userName} requested emergency ICU transfer for {$patientName} ({$details['current_ward']}, Bed {$details['current_bed']})",
+                    'PATIENT_TRANSFERRED_TO_ICU' => "{$userName} completed ICU transfer to {$details['to_ward']} ({$details['to_bed']})",
+                    'ICU_TRANSFER_REQUEST_CANCELLED' => "{$userName} cancelled ICU transfer request",
                     'LOGIN_SUCCESS' => "{$userName} signed in to hospital portal",
                     default => "{$userName} performed {$log->action}",
                 };

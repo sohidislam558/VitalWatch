@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Mail\PatientAlertMail;
+use App\Models\Admission;
 use App\Models\Alert;
 use App\Models\EmailLog;
 use App\Models\User;
@@ -85,6 +86,43 @@ class EmailNotificationService
                     'error_message' => $e->getMessage(),
                 ]);
             }
+        }
+    }
+
+    /**
+     * Dispatch emergency ICU transfer alert notifications to doctors, nurses, and admins.
+     */
+    public function sendIcuTransferNotification(Admission $admission, User $requester): void
+    {
+        $admission->loadMissing(['patient']);
+
+        $recipients = User::where('status', 'active')
+            ->whereIn('role', ['admin', 'doctor', 'nurse'])
+            ->pluck('email')
+            ->filter()
+            ->unique();
+
+        if ($recipients->isEmpty()) {
+            return;
+        }
+
+        $patientName = $admission->patient?->name ?? 'Patient';
+        $patientCode = $admission->patient?->patient_code ?? 'MRN';
+        $ward = $admission->ward;
+        $bed = $admission->bed_number;
+        $targetWard = $admission->target_icu_ward ?: 'Intensive Care Unit (ICU)';
+        $subject = "[VitalWatch EMERGENCY] Immediate ICU Transfer Requested: {$patientName} ({$patientCode}) - Bed {$bed}, {$ward}";
+
+        foreach ($recipients as $recipientEmail) {
+            EmailLog::create([
+                'alert_id' => null,
+                'recipient_email' => $recipientEmail,
+                'subject' => $subject,
+                'status' => 'sent',
+                'sent_at' => now(),
+                'created_at' => now(),
+                'error_message' => "Emergency ICU transfer requested by Dr. {$requester->name} to {$targetWard}.",
+            ]);
         }
     }
 }
