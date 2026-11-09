@@ -23,6 +23,8 @@ class Admission extends Model
         'icu_transfer_requested_by',
         'target_icu_ward',
         'icu_transfer_notes',
+        'icu_transferred',
+        'icu_transferred_at',
     ];
 
     protected function casts(): array
@@ -32,6 +34,8 @@ class Admission extends Model
             'discharged_at' => 'datetime',
             'icu_transfer_requested' => 'boolean',
             'icu_transfer_requested_at' => 'datetime',
+            'icu_transferred' => 'boolean',
+            'icu_transferred_at' => 'datetime',
         ];
     }
 

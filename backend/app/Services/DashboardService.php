@@ -153,6 +153,24 @@ class DashboardService
                 $combined = $reviewAlerts->pluck('message')->unique()->implode(' • ');
                 $situationDescription = "NOTICE: {$combined}. Monitor patient carefully.";
                 $badgeColor = 'amber';
+            } elseif ($patient->activeAdmission?->icu_transferred) {
+                $status = 'icu_observation';
+                $wardName = $patient->activeAdmission->ward;
+                $bedName = $patient->activeAdmission->bed_number;
+                $transferredAt = $patient->activeAdmission->icu_transferred_at;
+
+                // Check if new follow-up vitals have been recorded after the ICU transfer
+                $vitalsAfterTransfer = $vitals && $transferredAt && $vitals->created_at > $transferredAt;
+
+                if ($vitalsAfterTransfer) {
+                    $statusLabel = 'Under ICU Observation: Patient Stabilizing';
+                    $situationDescription = "Under ICU Observation in {$wardName} (Bed {$bedName}). Latest follow-up vitals (HR: {$vitals->heart_rate} bpm, BP: {$vitals->systolic_bp}/{$vitals->diastolic_bp}, SpO2: {$vitals->spo2}%) improving and stable within safe bounds.";
+                    $badgeColor = 'teal';
+                } else {
+                    $statusLabel = 'Under ICU Observation';
+                    $situationDescription = "Transferred to {$wardName} (Bed {$bedName}). Emergency bedside assessment completed. Patient is currently under intensive ICU observation awaiting follow-up telemetry.";
+                    $badgeColor = 'indigo';
+                }
             } elseif ($vitals) {
                 $status = 'stable';
                 $statusLabel = 'Normal & Stable';

@@ -100,7 +100,8 @@ export default function SituationMonitor({
       if (statusFilter === 'emergency' && patient.situation_status !== 'emergency') return false;
       if (statusFilter === 'doctor_in_action' && patient.situation_status !== 'doctor_in_action') return false;
       if (statusFilter === 'review' && patient.situation_status !== 'review') return false;
-      if (statusFilter === 'stable' && patient.situation_status !== 'stable') return false;
+      if (statusFilter === 'stable' && !['stable', 'icu_observation'].includes(patient.situation_status)) return false;
+      if (statusFilter === 'icu_observation' && patient.situation_status !== 'icu_observation') return false;
     }
 
     return true;
@@ -369,7 +370,8 @@ export default function SituationMonitor({
     emergency: patients.filter((p) => p.situation_status === 'emergency').length,
     doctor_in_action: patients.filter((p) => p.situation_status === 'doctor_in_action').length,
     review: patients.filter((p) => p.situation_status === 'review').length,
-    stable: patients.filter((p) => p.situation_status === 'stable').length,
+    stable: patients.filter((p) => ['stable', 'icu_observation'].includes(p.situation_status)).length,
+    icu_observation: patients.filter((p) => p.situation_status === 'icu_observation').length,
   };
 
   return (
@@ -454,6 +456,18 @@ export default function SituationMonitor({
             >
               Stable ({counts.stable})
             </button>
+            {counts.icu_observation > 0 && (
+              <button
+                onClick={() => setStatusFilter('icu_observation')}
+                className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
+                  statusFilter === 'icu_observation'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-indigo-700 hover:bg-indigo-50'
+                }`}
+              >
+                ICU Obs ({counts.icu_observation})
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -520,6 +534,7 @@ export default function SituationMonitor({
               review: 'border-amber-300 bg-gradient-to-b from-amber-50/40 via-white to-white',
               stable: 'border-emerald-200 bg-gradient-to-b from-emerald-50/20 via-white to-white',
               pending_vitals: 'border-slate-200 bg-white',
+              icu_observation: 'border-indigo-300 bg-gradient-to-b from-indigo-50/30 via-white to-white ring-1 ring-indigo-400/30',
             };
 
             const bannerStyles = {
@@ -528,6 +543,7 @@ export default function SituationMonitor({
               review: 'bg-amber-50 border-amber-200 text-amber-900',
               stable: 'bg-emerald-50 border-emerald-200 text-emerald-900',
               pending_vitals: 'bg-slate-50 border-slate-200 text-slate-700',
+              icu_observation: 'bg-indigo-50 border-indigo-200 text-indigo-900',
             };
 
             const badgeStyles = {
@@ -536,6 +552,7 @@ export default function SituationMonitor({
               review: 'bg-amber-500 text-white',
               stable: 'bg-emerald-600 text-white',
               pending_vitals: 'bg-slate-500 text-white',
+              icu_observation: 'bg-indigo-600 text-white',
             };
 
             return (
@@ -715,23 +732,28 @@ export default function SituationMonitor({
                     {/* DOCTOR ACTIONS */}
                     {canTakeDoctorAction && (
                       <>
-                        {/* 1. If THIS doctor is currently attending this patient, show "Assessment Done" + "Request ICU Transfer" buttons */}
+                        {/* 1. If THIS doctor is currently attending this patient, show "Assessment Done" + "Request ICU Transfer" buttons (only if not already in ICU) */}
                         {isAttendingThisPatient && (
                           <div className="flex items-center gap-1.5">
-                            {!patient.active_admission?.icu_transfer_requested ? (
-                              <button
-                                type="button"
-                                onClick={() => handleRequestIcuTransfer(patient)}
-                                disabled={requestingIcuId === patient.id}
-                                className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md shadow-rose-500/20 flex items-center gap-1.5 transition-all hover:scale-105 cursor-pointer"
-                                title="Patient condition deteriorating: Request emergency ICU bed"
-                              >
-                                <span>🚑 Request ICU</span>
-                              </button>
-                            ) : (
-                              <span className="px-2 py-1 rounded-lg bg-red-100 text-red-700 text-[11px] font-bold border border-red-300 flex items-center gap-1 animate-pulse">
-                                <span>🚨 ICU Requested</span>
-                              </span>
+                            {!(
+                              ['Intensive Care Unit (ICU)', 'Cardiology ICU'].includes(patient.active_admission?.ward) ||
+                              patient.active_admission?.icu_transferred
+                            ) && (
+                              !patient.active_admission?.icu_transfer_requested ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRequestIcuTransfer(patient)}
+                                  disabled={requestingIcuId === patient.id}
+                                  className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md shadow-rose-500/20 flex items-center gap-1.5 transition-all hover:scale-105 cursor-pointer"
+                                  title="Patient condition deteriorating: Request emergency ICU bed"
+                                >
+                                  <span>🚑 Request ICU</span>
+                                </button>
+                              ) : (
+                                <span className="px-2 py-1 rounded-lg bg-red-100 text-red-700 text-[11px] font-bold border border-red-300 flex items-center gap-1 animate-pulse">
+                                  <span>🚨 ICU Requested</span>
+                                </span>
+                              )
                             )}
 
                             <button

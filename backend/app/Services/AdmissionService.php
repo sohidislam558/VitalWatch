@@ -214,6 +214,19 @@ class AdmissionService
      */
     public function requestIcuTransfer(Admission $admission, User $requester, ?string $notes = null, ?string $targetWard = 'Intensive Care Unit (ICU)'): Admission
     {
+        $icuWards = ['Intensive Care Unit (ICU)', 'Cardiology ICU'];
+        if (in_array($admission->ward, $icuWards, true) || $admission->icu_transferred) {
+            throw ValidationException::withMessages([
+                'icu_transfer' => ["Patient is already admitted in {$admission->ward}. Emergency ICU transfer cannot be re-requested for patients already in the ICU."],
+            ]);
+        }
+
+        if ($admission->icu_transfer_requested) {
+            throw ValidationException::withMessages([
+                'icu_transfer' => ["An emergency ICU transfer request is already pending for this patient."],
+            ]);
+        }
+
         return DB::transaction(function () use ($admission, $requester, $notes, $targetWard) {
             $admission->update([
                 'icu_transfer_requested' => true,
@@ -275,6 +288,8 @@ class AdmissionService
                 'ward' => $newWard,
                 'bed_number' => $newBed,
                 'icu_transfer_requested' => false,
+                'icu_transferred' => true,
+                'icu_transferred_at' => now(),
                 'icu_transfer_notes' => "Transfer completed from {$oldWard} ({$oldBed}) to {$newWard} ({$newBed}) by {$actor->name}.",
             ]);
 

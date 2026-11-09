@@ -216,21 +216,26 @@ export default function DoctorPortal() {
 
             <div className="flex flex-col items-stretch sm:items-end gap-2 self-stretch sm:self-auto">
               <div className="flex flex-wrap items-center gap-2">
-                {/* 1-Click: Emergency ICU Transfer Request */}
-                {!currentAttendingPatient.active_admission?.icu_transfer_requested ? (
-                  <Button
-                    variant="danger"
-                    size="md"
-                    loading={icuTransferSubmitting}
-                    onClick={handleRequestIcuTransfer}
-                    className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-lg shadow-rose-600/30 flex items-center justify-center gap-1.5 text-xs hover:scale-105 transition-all cursor-pointer"
-                  >
-                    <span>🚑 Request ICU Transfer</span>
-                  </Button>
-                ) : (
-                  <div className="px-3 py-2 rounded-xl bg-red-500/30 border border-red-400 text-red-100 text-xs font-bold flex items-center gap-1.5 animate-pulse shadow-sm">
-                    <span>🚨 ICU Transfer Requested (Awaiting Bed)</span>
-                  </div>
+                {/* 1-Click: Emergency ICU Transfer Request (Only if not already in ICU) */}
+                {!(
+                  ['Intensive Care Unit (ICU)', 'Cardiology ICU'].includes(currentAttendingPatient.active_admission?.ward) ||
+                  currentAttendingPatient.active_admission?.icu_transferred
+                ) && (
+                  !currentAttendingPatient.active_admission?.icu_transfer_requested ? (
+                    <Button
+                      variant="danger"
+                      size="md"
+                      loading={icuTransferSubmitting}
+                      onClick={handleRequestIcuTransfer}
+                      className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-lg shadow-rose-600/30 flex items-center justify-center gap-1.5 text-xs hover:scale-105 transition-all cursor-pointer"
+                    >
+                      <span>🚑 Request ICU Transfer</span>
+                    </Button>
+                  ) : (
+                    <div className="px-3 py-2 rounded-xl bg-red-500/30 border border-red-400 text-red-100 text-xs font-bold flex items-center gap-1.5 animate-pulse shadow-sm">
+                      <span>🚨 ICU Transfer Requested (Awaiting Bed)</span>
+                    </div>
+                  )
                 )}
 
                 <Button
