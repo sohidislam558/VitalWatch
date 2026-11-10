@@ -41,5 +41,20 @@ export const admissionService = {
     const response = await api.post(`/admissions/${id}/cancel-icu-transfer`);
     return response.data;
   },
+
+  async requestStepDown(id, data = {}) {
+    const response = await api.post(`/admissions/${id}/request-step-down`, data);
+    return response.data;
+  },
+
+  async completeStepDown(id, data) {
+    const response = await api.post(`/admissions/${id}/complete-step-down`, data);
+    return response.data;
+  },
+
+  async cancelStepDown(id) {
+    const response = await api.post(`/admissions/${id}/cancel-step-down`);
+    return response.data;
+  },
 };
 

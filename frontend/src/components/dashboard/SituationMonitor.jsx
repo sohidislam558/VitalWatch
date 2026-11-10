@@ -65,6 +65,15 @@ export default function SituationMonitor({
   const [icuSubmitting, setIcuSubmitting] = useState(false);
   const [requestingIcuId, setRequestingIcuId] = useState(null);
 
+  // Ward Step-Down Transfer states (Reverse ICU -> General Ward)
+  const [stepDownPatient, setStepDownPatient] = useState(null);
+  const [stepDownWard, setStepDownWard] = useState('General Medical Ward');
+  const [stepDownBed, setStepDownBed] = useState('');
+  const [stepDownAvailableBeds, setStepDownAvailableBeds] = useState([]);
+  const [stepDownLoadingBeds, setStepDownLoadingBeds] = useState(false);
+  const [stepDownSubmitting, setStepDownSubmitting] = useState(false);
+  const [requestingStepDownId, setRequestingStepDownId] = useState(null);
+
   // Quick Vital Entry Modal state (for Nurse / Admin)
   const [vitalEntryPatient, setVitalEntryPatient] = useState(null);
   const [vitalForm, setVitalForm] = useState({
@@ -247,6 +256,94 @@ export default function SituationMonitor({
       toast.error(err.response?.data?.message || 'Failed to complete ICU transfer.');
     } finally {
       setIcuSubmitting(false);
+    }
+  };
+
+  // List of candidate non-ICU wards for step-down de-escalation
+  const STEP_DOWN_WARDS = [
+    'General Medical Ward',
+    'Telemetry Observation',
+    'Surgical Recovery',
+    'Respiratory Care Unit',
+    'Pediatric Ward',
+  ];
+
+  // 1-Click: Doctor/Admin requests Step-Down from ICU back to a general ward
+  const handleRequestStepDown = async (patient) => {
+    const admissionId = patient.active_admission?.id;
+    if (!admissionId) {
+      toast.error('No active admission found for this patient.');
+      return;
+    }
+
+    setRequestingStepDownId(patient.id);
+    try {
+      await admissionService.requestStepDown(admissionId, {
+        notes: `Step-down to general ward requested by Dr. ${user?.name || 'Physician'}. Patient condition is stable.`,
+        target_ward: 'General Medical Ward',
+      });
+      toast.success(
+        '🏥 Ward step-down requested! Patient queued for general bed allocation.',
+        { duration: 5000 }
+      );
+      broadcastTelemetryUpdate();
+      refreshAlerts();
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to request ward step-down.');
+    } finally {
+      setRequestingStepDownId(null);
+    }
+  };
+
+  // Open Step-Down Bed Allocation Modal (Nurse / Admin)
+  const openStepDownModal = (patient) => {
+    setStepDownPatient(patient);
+    const targetWard = patient.active_admission?.target_step_down_ward || 'General Medical Ward';
+    setStepDownWard(targetWard);
+    fetchStepDownBeds(targetWard);
+  };
+
+  const fetchStepDownBeds = async (ward) => {
+    setStepDownLoadingBeds(true);
+    try {
+      const res = await admissionService.getBeds(ward);
+      const available = res.data?.available_beds || [];
+      setStepDownAvailableBeds(available);
+      setStepDownBed(available[0] || '');
+    } catch {
+      toast.error('Failed to load available general ward beds.');
+    } finally {
+      setStepDownLoadingBeds(false);
+    }
+  };
+
+  // Complete Step-Down Bed Allocation
+  const handleCompleteStepDown = async (e) => {
+    e.preventDefault();
+    if (!stepDownPatient || !stepDownBed) {
+      toast.error('Please select an available ward bed.');
+      return;
+    }
+
+    setStepDownSubmitting(true);
+    try {
+      await admissionService.completeStepDown(stepDownPatient.active_admission?.id, {
+        ward: stepDownWard,
+        bed_number: stepDownBed,
+      });
+      toast.success(
+        `Patient ${stepDownPatient.name} successfully stepped down to ${stepDownWard} (${stepDownBed})!`,
+        { duration: 6000 }
+      );
+      setStepDownPatient(null);
+      broadcastTelemetryUpdate();
+      refreshAlerts();
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to complete ward step-down.');
+    } finally {
+      setStepDownSubmitting(false);
     }
   };
 
@@ -501,6 +598,40 @@ export default function SituationMonitor({
               className="px-3.5 py-2 rounded-lg bg-white text-red-700 hover:bg-red-50 text-xs font-bold shadow-md flex-shrink-0 cursor-pointer transition-colors"
             >
               Allocate ICU Bed Now
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* PENDING WARD STEP-DOWN TRANSFERS BANNER */}
+      {patients.filter((p) => p.active_admission?.step_down_requested).length > 0 && (
+        <div className="p-4 rounded-xl bg-gradient-to-r from-teal-700 to-emerald-700 text-white shadow-lg shadow-teal-700/20 border border-teal-500 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white text-lg flex-shrink-0">
+              🏥
+            </div>
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wider text-teal-200">
+                Ready for Ward Step-Down • General Bed Allocation Required
+              </div>
+              <div className="text-sm font-extrabold text-white mt-0.5">
+                {patients
+                  .filter((p) => p.active_admission?.step_down_requested)
+                  .map((p) => (
+                    <span key={p.id} className="mr-3">
+                      {p.name} ({p.active_admission?.ward}, Bed {p.active_admission?.bed_number} ➔ Target: {p.active_admission?.target_step_down_ward || 'General Ward'})
+                    </span>
+                  ))}
+              </div>
+            </div>
+          </div>
+          {(isNurse || isAdmin) && (
+            <button
+              type="button"
+              onClick={() => openStepDownModal(patients.find((p) => p.active_admission?.step_down_requested))}
+              className="px-3.5 py-2 rounded-lg bg-white text-teal-800 hover:bg-teal-50 text-xs font-bold shadow-md flex-shrink-0 cursor-pointer transition-colors"
+            >
+              Allocate General Bed
             </button>
           )}
         </div>
@@ -803,6 +934,28 @@ export default function SituationMonitor({
                             <span>Doctor Attending</span>
                           </span>
                         )}
+
+                        {/* 4. DOCTOR / ADMIN: Ward Step-Down Request for Stable Patients in ICU */}
+                        {!(
+                          !['Intensive Care Unit (ICU)', 'Cardiology ICU'].includes(patient.active_admission?.ward) &&
+                          !patient.active_admission?.icu_transferred
+                        ) && !activeEmergencyAlert && !doctorInActionAlert && (
+                          !patient.active_admission?.step_down_requested ? (
+                            <button
+                              type="button"
+                              onClick={() => handleRequestStepDown(patient)}
+                              disabled={requestingStepDownId === patient.id}
+                              className="px-2.5 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-md shadow-teal-600/20 flex items-center gap-1.5 transition-all hover:scale-105 cursor-pointer"
+                              title="Patient is clinically stable: Request transfer back to General Ward"
+                            >
+                              <span>🏥 Request Step-Down</span>
+                            </button>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-lg bg-teal-50 text-teal-700 text-[11px] font-bold border border-teal-200 flex items-center gap-1">
+                              <span>🏥 Step-Down Requested</span>
+                            </span>
+                          )
+                        )}
                       </>
                     )}
 
@@ -815,6 +968,18 @@ export default function SituationMonitor({
                       >
                         <Bed className="w-3.5 h-3.5" />
                         <span>🚑 Allocate ICU Bed</span>
+                      </button>
+                    )}
+
+                    {/* NURSE / ADMIN STEP-DOWN BED ALLOCATION BUTTON */}
+                    {(isNurse || isAdmin) && patient.active_admission?.step_down_requested && (
+                      <button
+                        type="button"
+                        onClick={() => openStepDownModal(patient)}
+                        className="px-2.5 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-md shadow-teal-600/30 flex items-center gap-1.5 transition-all hover:scale-105 cursor-pointer"
+                      >
+                        <Bed className="w-3.5 h-3.5" />
+                        <span>🏥 Allocate Ward Bed</span>
                       </button>
                     )}
 
@@ -1139,6 +1304,104 @@ export default function SituationMonitor({
                 className="bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer"
               >
                 Confirm ICU Bed Transfer
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* MODAL 4: Step-Down General Ward Bed Allocation Modal (Nurse / Admin) */}
+      {stepDownPatient && (
+        <Modal
+          isOpen={!!stepDownPatient}
+          onClose={() => setStepDownPatient(null)}
+          title="🏥 Ward Step-Down: General Bed Allocation"
+        >
+          <form onSubmit={handleCompleteStepDown} className="space-y-4">
+            <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl text-xs text-teal-900 space-y-1">
+              <div className="font-bold flex items-center gap-1.5 text-sm text-teal-950">
+                <span>🏥 Transfer from ICU to General Ward</span>
+              </div>
+              <p>
+                Patient <strong className="text-slate-900">{stepDownPatient.name}</strong> ({stepDownPatient.patient_code}) is clinically stable and ready for step-down care.
+              </p>
+              <p className="text-teal-700">
+                Current Location: {stepDownPatient.active_admission?.ward} • Bed {stepDownPatient.active_admission?.bed_number}
+              </p>
+              {stepDownPatient.active_admission?.step_down_notes && (
+                <p className="text-slate-600 italic mt-1 bg-white/70 p-2 rounded-lg border border-teal-100">
+                  Doctor's Note: "{stepDownPatient.active_admission?.step_down_notes}"
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Target General / Step-Down Ward
+              </label>
+              <select
+                value={stepDownWard}
+                onChange={(e) => {
+                  setStepDownWard(e.target.value);
+                  fetchStepDownBeds(e.target.value);
+                }}
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium text-slate-800"
+              >
+                {STEP_DOWN_WARDS.map((w) => (
+                  <option key={w} value={w}>
+                    {w}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Available Vacant Bed
+              </label>
+              {stepDownLoadingBeds ? (
+                <div className="py-2 text-xs text-slate-500 flex items-center gap-2">
+                  <LoadingSpinner size="sm" />
+                  <span>Checking available ward beds...</span>
+                </div>
+              ) : stepDownAvailableBeds.length === 0 ? (
+                <div className="p-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg">
+                  No vacant beds currently in {stepDownWard}. Please select another ward or discharge an occupant.
+                </div>
+              ) : (
+                <select
+                  value={stepDownBed}
+                  onChange={(e) => setStepDownBed(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-semibold text-slate-800"
+                  required
+                >
+                  {stepDownAvailableBeds.map((bed) => (
+                    <option key={bed} value={bed}>
+                      {bed} (Available)
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                onClick={() => setStepDownPatient(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                type="submit"
+                loading={stepDownSubmitting}
+                disabled={!stepDownBed || stepDownAvailableBeds.length === 0}
+                className="bg-teal-600 hover:bg-teal-700 text-white font-bold cursor-pointer"
+              >
+                Confirm Ward Step-Down
               </Button>
             </div>
           </form>

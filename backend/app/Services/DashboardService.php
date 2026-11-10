@@ -153,6 +153,14 @@ class DashboardService
                 $combined = $reviewAlerts->pluck('message')->unique()->implode(' • ');
                 $situationDescription = "NOTICE: {$combined}. Monitor patient carefully.";
                 $badgeColor = 'amber';
+            } elseif ($patient->activeAdmission?->step_down_requested) {
+                $status = 'icu_observation';
+                $statusLabel = 'Under ICU Observation: Step-Down to Ward Requested';
+                $wardName = $patient->activeAdmission->ward;
+                $bedName = $patient->activeAdmission->bed_number;
+                $targetWard = $patient->activeAdmission->target_step_down_ward ?: 'General Medical Ward';
+                $situationDescription = "Under ICU Observation in {$wardName} (Bed {$bedName}). Attending doctor requested step-down to {$targetWard}. Awaiting general ward bed allocation.";
+                $badgeColor = 'teal';
             } elseif ($patient->activeAdmission?->icu_transferred) {
                 $status = 'icu_observation';
                 $wardName = $patient->activeAdmission->ward;
@@ -171,6 +179,17 @@ class DashboardService
                     $situationDescription = "Transferred to {$wardName} (Bed {$bedName}). Emergency bedside assessment completed. Patient is currently under intensive ICU observation awaiting follow-up telemetry.";
                     $badgeColor = 'indigo';
                 }
+            } elseif ($patient->activeAdmission?->step_down_completed) {
+                $status = 'stable';
+                $wardName = $patient->activeAdmission->ward;
+                $bedName = $patient->activeAdmission->bed_number;
+                $statusLabel = 'Stepped Down to General Ward: Normal & Stable';
+                if ($vitals) {
+                    $situationDescription = "Patient successfully stepped down from ICU to {$wardName} ({$bedName}). Vital signs within safe bounds (HR: {$vitals->heart_rate} bpm, BP: {$vitals->systolic_bp}/{$vitals->diastolic_bp}, SpO2: {$vitals->spo2}%). Resting comfortably in general ward.";
+                } else {
+                    $situationDescription = "Patient successfully stepped down from ICU to {$wardName} ({$bedName}). Currently resting comfortably under standard ward care.";
+                }
+                $badgeColor = 'emerald';
             } elseif ($vitals) {
                 $status = 'stable';
                 $statusLabel = 'Normal & Stable';
@@ -247,6 +266,9 @@ class DashboardService
                     'EMERGENCY_ICU_TRANSFER_REQUESTED' => "Dr. {$userName} requested emergency ICU transfer for {$patientName} ({$details['current_ward']}, Bed {$details['current_bed']})",
                     'PATIENT_TRANSFERRED_TO_ICU' => "{$userName} completed ICU transfer to {$details['to_ward']} ({$details['to_bed']})",
                     'ICU_TRANSFER_REQUEST_CANCELLED' => "{$userName} cancelled ICU transfer request",
+                    'STEP_DOWN_REQUESTED' => "Dr. {$userName} requested ward step-down for {$patientName} ({$details['current_ward']}, Bed {$details['current_bed']})",
+                    'PATIENT_STEPPED_DOWN' => "{$userName} completed ward step-down to {$details['to_ward']} ({$details['to_bed']})",
+                    'STEP_DOWN_CANCELLED' => "{$userName} cancelled ward step-down request",
                     'LOGIN_SUCCESS' => "{$userName} signed in to hospital portal",
                     default => "{$userName} performed {$log->action}",
                 };

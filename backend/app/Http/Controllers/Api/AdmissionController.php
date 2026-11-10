@@ -182,5 +182,81 @@ class AdmissionController extends Controller
             'data' => $updated,
         ]);
     }
+
+    /**
+     * Request step-down from ICU back to a general ward / normal bed for a stabilized patient.
+     */
+    public function requestStepDown(Request $request, int $id): JsonResponse
+    {
+        $admission = Admission::with('patient')->findOrFail($id);
+        $this->authorize('requestStepDown', $admission);
+
+        $request->validate([
+            'notes' => ['nullable', 'string', 'max:1000'],
+            'target_ward' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        $updated = $this->admissionService->requestStepDown(
+            $admission,
+            $request->user(),
+            $request->input('notes'),
+            $request->input('target_ward', 'General Medical Ward')
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Ward step-down requested. Patient is stable and queued for general bed allocation.',
+            'data' => $updated,
+        ]);
+    }
+
+    /**
+     * Complete ward step-down transfer by assigning an available general bed.
+     */
+    public function completeStepDown(Request $request, int $id): JsonResponse
+    {
+        $admission = Admission::with('patient')->findOrFail($id);
+        $this->authorize('completeStepDown', $admission);
+
+        $request->validate([
+            'ward' => ['required', 'string', 'max:100'],
+            'bed_number' => ['required', 'string', 'max:50'],
+        ]);
+
+        $updated = $this->admissionService->completeStepDown(
+            $admission,
+            $request->user(),
+            $request->input('ward'),
+            $request->input('bed_number'),
+            $request->ip()
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => "Patient successfully stepped down to {$updated->ward} ({$updated->bed_number}).",
+            'data' => $updated,
+        ]);
+    }
+
+    /**
+     * Cancel / revoke a ward step-down request.
+     */
+    public function cancelStepDown(Request $request, int $id): JsonResponse
+    {
+        $admission = Admission::with('patient')->findOrFail($id);
+        $this->authorize('cancelStepDown', $admission);
+
+        $updated = $this->admissionService->cancelStepDown(
+            $admission,
+            $request->user(),
+            $request->ip()
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Ward step-down request cancelled.',
+            'data' => $updated,
+        ]);
+    }
 }
 

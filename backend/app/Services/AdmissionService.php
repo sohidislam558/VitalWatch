@@ -336,5 +336,149 @@ class AdmissionService
 
         return $admission->fresh(['patient']);
     }
+
+    /**
+     * Request step-down / transfer back to a general ward for a stable ICU patient.
+     */
+    public function requestStepDown(Admission $admission, User $requester, ?string $notes = null, ?string $targetWard = 'General Medical Ward'): Admission
+    {
+        $icuWards = ['Intensive Care Unit (ICU)', 'Cardiology ICU'];
+        if (!in_array($admission->ward, $icuWards, true) && !$admission->icu_transferred) {
+            throw ValidationException::withMessages([
+                'step_down' => ["Patient is currently in {$admission->ward}, not an intensive care unit. Step-down transfer is only applicable for patients in the ICU."],
+            ]);
+        }
+
+        if ($admission->step_down_requested) {
+            throw ValidationException::withMessages([
+                'step_down' => ["A step-down ward transfer request is already pending for this patient."],
+            ]);
+        }
+
+        // Patient must be clinically stable before requesting step-down
+        $hasActiveAlerts = $admission->patient?->alerts()
+            ->whereIn('status', ['active', 'doctor_in_action'])
+            ->exists();
+
+        if ($hasActiveAlerts) {
+            throw ValidationException::withMessages([
+                'step_down' => ["Patient has unresolved emergency alarms. Complete the clinical assessment and ensure vitals are stable before requesting step-down to a general ward."],
+            ]);
+        }
+
+        return DB::transaction(function () use ($admission, $requester, $notes, $targetWard) {
+            $admission->update([
+                'step_down_requested' => true,
+                'step_down_requested_at' => now(),
+                'step_down_requested_by' => $requester->id,
+                'target_step_down_ward' => $targetWard ?: 'General Medical Ward',
+                'step_down_notes' => $notes ?: "Step-down to general ward requested by Dr. {$requester->name}. Patient condition is stable and ready for step-down care.",
+            ]);
+
+            $this->auditService->log(
+                action: 'STEP_DOWN_REQUESTED',
+                entityType: Admission::class,
+                entityId: $admission->id,
+                details: [
+                    'patient_id' => $admission->patient_id,
+                    'patient_name' => $admission->patient?->name,
+                    'current_ward' => $admission->ward,
+                    'current_bed' => $admission->bed_number,
+                    'target_ward' => $admission->target_step_down_ward,
+                    'requester_id' => $requester->id,
+                    'requester_name' => $requester->name,
+                    'notes' => $admission->step_down_notes,
+                ],
+                user: $requester
+            );
+
+            return $admission->fresh(['patient', 'stepDownRequester']);
+        });
+    }
+
+    /**
+     * Complete step-down transfer by allocating an available general ward bed.
+     */
+    public function completeStepDown(Admission $admission, User $actor, string $newWard, string $newBed, string $ip): Admission
+    {
+        $icuWards = ['Intensive Care Unit (ICU)', 'Cardiology ICU'];
+        if (in_array($newWard, $icuWards, true)) {
+            throw ValidationException::withMessages([
+                'ward' => ["Step-down target ward must be a general or step-down ward, not an intensive care unit."],
+            ]);
+        }
+
+        return DB::transaction(function () use ($admission, $actor, $newWard, $newBed, $ip) {
+            $bedOccupied = Admission::where('ward', $newWard)
+                ->where('bed_number', $newBed)
+                ->where('status', 'admitted')
+                ->where('id', '!=', $admission->id)
+                ->with('patient')
+                ->first();
+
+            if ($bedOccupied) {
+                $occupant = $bedOccupied->patient?->name ?? 'another patient';
+                throw ValidationException::withMessages([
+                    'bed_number' => ["Bed '{$newBed}' in '{$newWard}' is currently occupied by {$occupant}. Please select an available bed."],
+                ]);
+            }
+
+            $oldWard = $admission->ward;
+            $oldBed = $admission->bed_number;
+
+            $admission->update([
+                'ward' => $newWard,
+                'bed_number' => $newBed,
+                'step_down_requested' => false,
+                'step_down_completed' => true,
+                'step_down_completed_at' => now(),
+                'icu_transferred' => false, // Reset ICU transferred flag!
+                'target_step_down_ward' => null,
+                'step_down_notes' => "Step-down completed from {$oldWard} ({$oldBed}) to {$newWard} ({$newBed}) by {$actor->name}.",
+            ]);
+
+            $this->auditService->log(
+                action: 'PATIENT_STEPPED_DOWN',
+                entityType: Admission::class,
+                entityId: $admission->id,
+                details: [
+                    'patient_id' => $admission->patient_id,
+                    'from_ward' => $oldWard,
+                    'from_bed' => $oldBed,
+                    'to_ward' => $newWard,
+                    'to_bed' => $newBed,
+                    'transferred_by' => $actor->name,
+                ],
+                user: $actor,
+                ipAddress: $ip
+            );
+
+            return $admission->fresh(['patient', 'stepDownRequester']);
+        });
+    }
+
+    /**
+     * Cancel / revoke a step-down request.
+     */
+    public function cancelStepDown(Admission $admission, User $actor, string $ip): Admission
+    {
+        $admission->update([
+            'step_down_requested' => false,
+        ]);
+
+        $this->auditService->log(
+            action: 'STEP_DOWN_CANCELLED',
+            entityType: Admission::class,
+            entityId: $admission->id,
+            details: [
+                'patient_id' => $admission->patient_id,
+                'cancelled_by' => $actor->name,
+            ],
+            user: $actor,
+            ipAddress: $ip
+        );
+
+        return $admission->fresh(['patient']);
+    }
 }
 

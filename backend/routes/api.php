@@ -60,6 +60,9 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('/admissions/{id}/request-icu-transfer', [AdmissionController::class, 'requestIcuTransfer']);
     Route::post('/admissions/{id}/complete-icu-transfer', [AdmissionController::class, 'completeIcuTransfer']);
     Route::post('/admissions/{id}/cancel-icu-transfer', [AdmissionController::class, 'cancelIcuTransfer']);
+    Route::post('/admissions/{id}/request-step-down', [AdmissionController::class, 'requestStepDown']);
+    Route::post('/admissions/{id}/complete-step-down', [AdmissionController::class, 'completeStepDown']);
+    Route::post('/admissions/{id}/cancel-step-down', [AdmissionController::class, 'cancelStepDown']);
 
     // Vital Records
     Route::get('/vitals', [VitalController::class, 'index']);

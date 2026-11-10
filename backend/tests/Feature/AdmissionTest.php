@@ -235,4 +235,67 @@ class AdmissionTest extends TestCase
         $patientData2 = collect($monitorRes2->json('data.data'))->firstWhere('id', $patient->id);
         $this->assertEquals('Under ICU Observation: Patient Stabilizing', $patientData2['situation_label']);
     }
+
+    public function test_doctor_can_request_ward_step_down_and_nurse_can_complete(): void
+    {
+        // 1. Create patient in ICU
+        [$patient, $admission] = $this->createTestPatient('Intensive Care Unit (ICU)', 'ICU-02');
+        $admission->update(['icu_transferred' => true]);
+
+        $docHeaders = $this->getAuthHeader('doctor');
+        $nurseHeaders = $this->getAuthHeader('nurse');
+
+        // 2. Doctor requests ward step-down
+        $stepDownRes = $this->withHeaders($docHeaders)
+            ->postJson("/api/admissions/{$admission->id}/request-step-down", [
+                'target_ward' => 'General Medical Ward',
+                'notes' => 'Patient has recovered and is stable for general ward care.',
+            ]);
+
+        $stepDownRes->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'step_down_requested' => true,
+                    'target_step_down_ward' => 'General Medical Ward',
+                ],
+            ]);
+
+        // Situation monitor shows step-down requested
+        auth()->forgetGuards();
+        $monitorRes = $this->withHeaders($docHeaders)->getJson('/api/dashboard/patients');
+        $patientData = collect($monitorRes->json('data.data'))->firstWhere('id', $patient->id);
+        $this->assertEquals('Under ICU Observation: Step-Down to Ward Requested', $patientData['situation_label']);
+
+        // 3. Nurse completes step-down to General Medical Ward, Bed 109
+        auth()->forgetGuards();
+        $completeRes = $this->withHeaders($nurseHeaders)
+            ->postJson("/api/admissions/{$admission->id}/complete-step-down", [
+                'ward' => 'General Medical Ward',
+                'bed_number' => 'Bed 109',
+            ]);
+
+        $completeRes->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'ward' => 'General Medical Ward',
+                    'bed_number' => 'Bed 109',
+                    'step_down_completed' => true,
+                    'icu_transferred' => false,
+                ],
+            ]);
+
+        $freshAdmission = $admission->fresh();
+        $this->assertEquals('General Medical Ward', $freshAdmission->ward);
+        $this->assertEquals('Bed 109', $freshAdmission->bed_number);
+        $this->assertFalse($freshAdmission->icu_transferred);
+        $this->assertTrue($freshAdmission->step_down_completed);
+
+        // 4. Verify dashboard patient status reflects successful step-down
+        auth()->forgetGuards();
+        $monitorRes2 = $this->withHeaders($docHeaders)->getJson('/api/dashboard/patients');
+        $patientData2 = collect($monitorRes2->json('data.data'))->firstWhere('id', $patient->id);
+        $this->assertEquals('Stepped Down to General Ward: Normal & Stable', $patientData2['situation_label']);
+    }
 }

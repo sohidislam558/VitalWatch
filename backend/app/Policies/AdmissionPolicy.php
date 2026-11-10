@@ -38,5 +38,20 @@ class AdmissionPolicy
     {
         return in_array($user->role, ['nurse', 'admin', 'doctor'], true) && $admission->status === 'admitted';
     }
+
+    public function requestStepDown(User $user, Admission $admission): bool
+    {
+        return in_array($user->role, ['doctor', 'admin'], true) && $admission->status === 'admitted';
+    }
+
+    public function completeStepDown(User $user, Admission $admission): bool
+    {
+        return in_array($user->role, ['nurse', 'admin', 'doctor'], true) && $admission->status === 'admitted';
+    }
+
+    public function cancelStepDown(User $user, Admission $admission): bool
+    {
+        return in_array($user->role, ['doctor', 'nurse', 'admin'], true) && $admission->status === 'admitted';
+    }
 }
 
