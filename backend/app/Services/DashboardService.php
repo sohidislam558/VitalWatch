@@ -183,13 +183,24 @@ class DashboardService
                 $status = 'stable';
                 $wardName = $patient->activeAdmission->ward;
                 $bedName = $patient->activeAdmission->bed_number;
-                $statusLabel = 'Stepped Down to General Ward: Normal & Stable';
-                if ($vitals) {
-                    $situationDescription = "Patient successfully stepped down from ICU to {$wardName} ({$bedName}). Vital signs within safe bounds (HR: {$vitals->heart_rate} bpm, BP: {$vitals->systolic_bp}/{$vitals->diastolic_bp}, SpO2: {$vitals->spo2}%). Resting comfortably in general ward.";
+                $stepDownAt = $patient->activeAdmission->step_down_completed_at;
+
+                // Check if new follow-up vitals have been recorded in the general ward after the step-down was completed
+                $vitalsAfterStepDown = $vitals && $stepDownAt && $vitals->created_at > $stepDownAt;
+
+                if ($vitalsAfterStepDown) {
+                    $statusLabel = 'Normal & Stable';
+                    $situationDescription = "All vital signs within safe bounds (HR: {$vitals->heart_rate} bpm, BP: {$vitals->systolic_bp}/{$vitals->diastolic_bp}, SpO2: {$vitals->spo2}%). Patient resting comfortably in {$wardName}.";
+                    $badgeColor = 'emerald';
                 } else {
-                    $situationDescription = "Patient successfully stepped down from ICU to {$wardName} ({$bedName}). Currently resting comfortably under standard ward care.";
+                    $statusLabel = 'Stepped Down to General Ward: Normal & Stable';
+                    if ($vitals) {
+                        $situationDescription = "Patient successfully stepped down from ICU to {$wardName} ({$bedName}). Vital signs within safe bounds (HR: {$vitals->heart_rate} bpm, BP: {$vitals->systolic_bp}/{$vitals->diastolic_bp}, SpO2: {$vitals->spo2}%). Resting comfortably in general ward.";
+                    } else {
+                        $situationDescription = "Patient successfully stepped down from ICU to {$wardName} ({$bedName}). Currently resting comfortably under standard ward care.";
+                    }
+                    $badgeColor = 'emerald';
                 }
-                $badgeColor = 'emerald';
             } elseif ($vitals) {
                 $status = 'stable';
                 $statusLabel = 'Normal & Stable';

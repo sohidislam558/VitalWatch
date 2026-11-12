@@ -292,10 +292,31 @@ class AdmissionTest extends TestCase
         $this->assertFalse($freshAdmission->icu_transferred);
         $this->assertTrue($freshAdmission->step_down_completed);
 
-        // 4. Verify dashboard patient status reflects successful step-down
+        // 4. Verify dashboard patient status reflects successful step-down immediately after transfer
         auth()->forgetGuards();
         $monitorRes2 = $this->withHeaders($docHeaders)->getJson('/api/dashboard/patients');
         $patientData2 = collect($monitorRes2->json('data.data'))->firstWhere('id', $patient->id);
         $this->assertEquals('Stepped Down to General Ward: Normal & Stable', $patientData2['situation_label']);
+
+        // 5. Nurse records new vitals in general ward -> status must now show strictly "Normal & Stable" (no other extension)
+        sleep(1);
+        auth()->forgetGuards();
+        $this->withHeaders($nurseHeaders)->postJson('/api/vitals', [
+            'patient_id' => $patient->id,
+            'admission_id' => $admission->id,
+            'heart_rate' => 72,
+            'systolic_bp' => 120,
+            'diastolic_bp' => 80,
+            'spo2' => 98,
+            'temperature' => 36.6,
+            'respiratory_rate' => 16,
+            'measured_at' => now()->toDateTimeString(),
+        ]);
+
+        auth()->forgetGuards();
+        $monitorRes3 = $this->withHeaders($docHeaders)->getJson('/api/dashboard/patients');
+        $patientData3 = collect($monitorRes3->json('data.data'))->firstWhere('id', $patient->id);
+        $this->assertEquals('Normal & Stable', $patientData3['situation_label']);
+        $this->assertEquals('stable', $patientData3['situation_status']);
     }
 }

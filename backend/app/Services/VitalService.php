@@ -85,6 +85,12 @@ class VitalService
                 'measured_at' => $data['measured_at'] ?? now(),
             ]);
 
+            // If patient was stepped down from ICU and new vitals are recorded in the general ward,
+            // clear the step_down_completed flag so status displays standard "Normal & Stable"
+            if ($admission->step_down_completed) {
+                $admission->update(['step_down_completed' => false]);
+            }
+
             // Trigger Alert Engine
             $alerts = $this->alertService->evaluateVitals($vitalRecord, $actor);
 
