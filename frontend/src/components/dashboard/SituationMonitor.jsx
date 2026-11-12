@@ -87,6 +87,36 @@ export default function SituationMonitor({
   });
   const [vitalSubmitting, setVitalSubmitting] = useState(false);
 
+  // Helper to format request timestamp and elapsed waiting duration
+  const formatQueueTime = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const minsAgo = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
+    if (minsAgo === 0) return `${time} (Just now)`;
+    if (minsAgo < 60) return `${time} (${minsAgo}m ago)`;
+    const hoursAgo = Math.floor(minsAgo / 60);
+    return `${time} (${hoursAgo}h ago)`;
+  };
+
+  // FIFO Queue for Emergency ICU Transfers: Ordered strictly by earliest requested time (Priority #1 = earliest request)
+  const icuTransferQueue = [...patients]
+    .filter((p) => p.active_admission?.icu_transfer_requested)
+    .sort((a, b) => {
+      const timeA = new Date(a.active_admission?.icu_transfer_requested_at || a.created_at || 0).getTime();
+      const timeB = new Date(b.active_admission?.icu_transfer_requested_at || b.created_at || 0).getTime();
+      return timeA - timeB;
+    });
+
+  // FIFO Queue for Ward Step-Down Transfers: Ordered strictly by earliest requested time (Priority #1 = earliest request)
+  const stepDownQueue = [...patients]
+    .filter((p) => p.active_admission?.step_down_requested)
+    .sort((a, b) => {
+      const timeA = new Date(a.active_admission?.step_down_requested_at || a.created_at || 0).getTime();
+      const timeB = new Date(b.active_admission?.step_down_requested_at || b.created_at || 0).getTime();
+      return timeA - timeB;
+    });
+
   // Derive unique wards from constants and currently admitted patients
   const availableWards = Array.from(
     new Set([...WARDS, ...patients.map((p) => p.active_admission?.ward).filter(Boolean)])
@@ -569,71 +599,201 @@ export default function SituationMonitor({
         </div>
       </div>
 
-      {/* PENDING EMERGENCY ICU TRANSFERS BANNER */}
-      {patients.filter((p) => p.active_admission?.icu_transfer_requested).length > 0 && (
-        <div className="p-4 rounded-xl bg-gradient-to-r from-red-600 to-rose-700 text-white shadow-lg shadow-red-600/25 border border-red-500 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-pulse">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white text-lg flex-shrink-0">
-              🚑
-            </div>
-            <div>
-              <div className="text-[11px] font-bold uppercase tracking-wider text-red-200">
-                🚨 Immediate Action Required: Emergency ICU Bed Allocation
+      {/* PENDING EMERGENCY ICU TRANSFERS FIFO PRIORITY QUEUE BANNER */}
+      {icuTransferQueue.length > 0 && (
+        <div className="p-4 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-rose-700 text-white shadow-lg shadow-red-600/25 border border-red-500 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white text-lg flex-shrink-0 animate-pulse">
+                🚑
               </div>
-              <div className="text-sm font-extrabold text-white mt-0.5">
-                {patients
-                  .filter((p) => p.active_admission?.icu_transfer_requested)
-                  .map((p) => (
-                    <span key={p.id} className="mr-3">
-                      {p.name} ({p.active_admission?.ward}, Bed {p.active_admission?.bed_number})
-                    </span>
-                  ))}
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-red-200">
+                    🚨 Immediate Action Required: Emergency ICU Bed Allocation Queue
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-white/25 text-white font-mono text-[10px] font-bold">
+                    {icuTransferQueue.length} {icuTransferQueue.length === 1 ? 'Patient Waiting' : 'Patients Waiting'}
+                  </span>
+                </div>
+                <div className="text-xs text-red-100 mt-0.5">
+                  <strong>FIFO Priority Queue:</strong> Patients are queued in strict chronological order by doctor request time. The patient requested first holds #1 Priority.
+                </div>
               </div>
             </div>
+
+            {(isNurse || isAdmin) && (
+              <button
+                type="button"
+                onClick={() => openIcuTransferModal(icuTransferQueue[0])}
+                className="px-3.5 py-2 rounded-lg bg-white text-red-700 hover:bg-red-50 text-xs font-extrabold shadow-md flex-shrink-0 cursor-pointer transition-all hover:scale-105"
+              >
+                Allocate Bed for Priority #1 ({icuTransferQueue[0].name})
+              </button>
+            )}
           </div>
-          {(isNurse || isAdmin) && (
-            <button
-              type="button"
-              onClick={() => openIcuTransferModal(patients.find((p) => p.active_admission?.icu_transfer_requested))}
-              className="px-3.5 py-2 rounded-lg bg-white text-red-700 hover:bg-red-50 text-xs font-bold shadow-md flex-shrink-0 cursor-pointer transition-colors"
-            >
-              Allocate ICU Bed Now
-            </button>
-          )}
+
+          {/* Individual Queue Items in Priority Order */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+            {icuTransferQueue.map((patient, index) => {
+              const isFirstPriority = index === 0;
+              const requestedAt = patient.active_admission?.icu_transfer_requested_at;
+              return (
+                <div
+                  key={patient.id}
+                  className={`p-3 rounded-lg flex flex-col justify-between gap-2 border transition-all ${
+                    isFirstPriority
+                      ? 'bg-white/15 border-white/40 ring-1 ring-white/30'
+                      : 'bg-black/15 border-white/10'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider ${
+                          isFirstPriority
+                            ? 'bg-white text-red-700 shadow-xs'
+                            : 'bg-red-950/60 text-red-200 border border-red-400/30'
+                        }`}
+                      >
+                        Priority #{index + 1} {isFirstPriority && '• 1st in Queue'}
+                      </span>
+                      {requestedAt && (
+                        <span className="text-[10px] text-red-200 font-mono">
+                          {formatQueueTime(requestedAt)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-bold text-sm text-white truncate">
+                      {patient.name}{' '}
+                      <span className="text-red-200 font-normal text-xs">
+                        ({patient.patient_code})
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-red-100 mt-0.5">
+                      Current: {patient.active_admission?.ward} • Bed {patient.active_admission?.bed_number}
+                    </div>
+                    <div className="text-[10px] text-red-200 italic mt-0.5">
+                      Target: {patient.active_admission?.target_icu_ward || 'Intensive Care Unit (ICU)'}
+                    </div>
+                  </div>
+
+                  {(isNurse || isAdmin) && (
+                    <button
+                      type="button"
+                      onClick={() => openIcuTransferModal(patient)}
+                      className={`w-full py-1.5 px-2.5 rounded text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                        isFirstPriority
+                          ? 'bg-white text-red-700 hover:bg-red-50 shadow-sm'
+                          : 'bg-white/20 text-white hover:bg-white/30'
+                      }`}
+                    >
+                      <span>Allocate Bed (Priority #{index + 1})</span>
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
-      {/* PENDING WARD STEP-DOWN TRANSFERS BANNER */}
-      {patients.filter((p) => p.active_admission?.step_down_requested).length > 0 && (
-        <div className="p-4 rounded-xl bg-gradient-to-r from-teal-700 to-emerald-700 text-white shadow-lg shadow-teal-700/20 border border-teal-500 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white text-lg flex-shrink-0">
-              🏥
-            </div>
-            <div>
-              <div className="text-[11px] font-bold uppercase tracking-wider text-teal-200">
-                Ready for Ward Step-Down • General Bed Allocation Required
+      {/* PENDING WARD STEP-DOWN TRANSFERS FIFO PRIORITY QUEUE BANNER */}
+      {stepDownQueue.length > 0 && (
+        <div className="p-4 rounded-xl bg-gradient-to-r from-teal-700 via-teal-800 to-emerald-800 text-white shadow-lg shadow-teal-700/20 border border-teal-500 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white text-lg flex-shrink-0">
+                🏥
               </div>
-              <div className="text-sm font-extrabold text-white mt-0.5">
-                {patients
-                  .filter((p) => p.active_admission?.step_down_requested)
-                  .map((p) => (
-                    <span key={p.id} className="mr-3">
-                      {p.name} ({p.active_admission?.ward}, Bed {p.active_admission?.bed_number} ➔ Target: {p.active_admission?.target_step_down_ward || 'General Ward'})
-                    </span>
-                  ))}
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-teal-200">
+                    Ready for Ward Step-Down • General Bed Allocation Queue
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-white/25 text-white font-mono text-[10px] font-bold">
+                    {stepDownQueue.length} {stepDownQueue.length === 1 ? 'Patient Waiting' : 'Patients Waiting'}
+                  </span>
+                </div>
+                <div className="text-xs text-teal-100 mt-0.5">
+                  <strong>FIFO Priority Queue:</strong> Step-down allocation is strictly prioritized by earliest doctor request time. Earliest request holds #1 Priority.
+                </div>
               </div>
             </div>
+
+            {(isNurse || isAdmin) && (
+              <button
+                type="button"
+                onClick={() => openStepDownModal(stepDownQueue[0])}
+                className="px-3.5 py-2 rounded-lg bg-white text-teal-800 hover:bg-teal-50 text-xs font-extrabold shadow-md flex-shrink-0 cursor-pointer transition-all hover:scale-105"
+              >
+                Allocate Bed for Priority #1 ({stepDownQueue[0].name})
+              </button>
+            )}
           </div>
-          {(isNurse || isAdmin) && (
-            <button
-              type="button"
-              onClick={() => openStepDownModal(patients.find((p) => p.active_admission?.step_down_requested))}
-              className="px-3.5 py-2 rounded-lg bg-white text-teal-800 hover:bg-teal-50 text-xs font-bold shadow-md flex-shrink-0 cursor-pointer transition-colors"
-            >
-              Allocate General Bed
-            </button>
-          )}
+
+          {/* Individual Step-Down Queue Items in Priority Order */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+            {stepDownQueue.map((patient, index) => {
+              const isFirstPriority = index === 0;
+              const requestedAt = patient.active_admission?.step_down_requested_at;
+              return (
+                <div
+                  key={patient.id}
+                  className={`p-3 rounded-lg flex flex-col justify-between gap-2 border transition-all ${
+                    isFirstPriority
+                      ? 'bg-white/15 border-white/40 ring-1 ring-white/30'
+                      : 'bg-black/15 border-white/10'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider ${
+                          isFirstPriority
+                            ? 'bg-white text-teal-800 shadow-xs'
+                            : 'bg-teal-950/60 text-teal-200 border border-teal-400/30'
+                        }`}
+                      >
+                        Priority #{index + 1} {isFirstPriority && '• 1st in Queue'}
+                      </span>
+                      {requestedAt && (
+                        <span className="text-[10px] text-teal-200 font-mono">
+                          {formatQueueTime(requestedAt)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-bold text-sm text-white truncate">
+                      {patient.name}{' '}
+                      <span className="text-teal-200 font-normal text-xs">
+                        ({patient.patient_code})
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-teal-100 mt-0.5">
+                      Current: {patient.active_admission?.ward} • Bed {patient.active_admission?.bed_number}
+                    </div>
+                    <div className="text-[10px] text-teal-200 italic mt-0.5">
+                      Target: {patient.active_admission?.target_step_down_ward || 'General Medical Ward'}
+                    </div>
+                  </div>
+
+                  {(isNurse || isAdmin) && (
+                    <button
+                      type="button"
+                      onClick={() => openStepDownModal(patient)}
+                      className={`w-full py-1.5 px-2.5 rounded text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                        isFirstPriority
+                          ? 'bg-white text-teal-800 hover:bg-teal-50 shadow-sm'
+                          : 'bg-white/20 text-white hover:bg-white/30'
+                      }`}
+                    >
+                      <span>Allocate Bed (Priority #{index + 1})</span>
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -657,6 +817,10 @@ export default function SituationMonitor({
             const doctorInActionAlert = patient.alerts?.find((a) => a.status === 'doctor_in_action');
             const isAttendingThisPatient =
               myAttendingAlert && patient.alerts?.some((a) => a.id === myAttendingAlert.id);
+
+            // Queue priority positions (FIFO: earliest requested = index 0 = Priority #1)
+            const icuQueueIndex = icuTransferQueue.findIndex((p) => p.id === patient.id);
+            const stepDownQueueIndex = stepDownQueue.findIndex((p) => p.id === patient.id);
 
             // Card styling by status
             const cardStyles = {
@@ -882,7 +1046,9 @@ export default function SituationMonitor({
                                 </button>
                               ) : (
                                 <span className="px-2 py-1 rounded-lg bg-red-100 text-red-700 text-[11px] font-bold border border-red-300 flex items-center gap-1 animate-pulse">
-                                  <span>🚨 ICU Requested</span>
+                                  <span>
+                                    🚨 ICU Requested {icuQueueIndex !== -1 && `(#${icuQueueIndex + 1} in Queue)`}
+                                  </span>
                                 </span>
                               )
                             )}
@@ -952,7 +1118,9 @@ export default function SituationMonitor({
                             </button>
                           ) : (
                             <span className="px-2.5 py-1 rounded-lg bg-teal-50 text-teal-700 text-[11px] font-bold border border-teal-200 flex items-center gap-1">
-                              <span>🏥 Step-Down Requested</span>
+                              <span>
+                                🏥 Step-Down Requested {stepDownQueueIndex !== -1 && `(#${stepDownQueueIndex + 1} in Queue)`}
+                              </span>
                             </span>
                           )
                         )}
@@ -967,7 +1135,9 @@ export default function SituationMonitor({
                         className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md shadow-rose-500/30 flex items-center gap-1.5 animate-pulse transition-all hover:scale-105 cursor-pointer"
                       >
                         <Bed className="w-3.5 h-3.5" />
-                        <span>🚑 Allocate ICU Bed</span>
+                        <span>
+                          🚑 Allocate ICU Bed {icuQueueIndex !== -1 && `(Priority #${icuQueueIndex + 1})`}
+                        </span>
                       </button>
                     )}
 
@@ -979,7 +1149,9 @@ export default function SituationMonitor({
                         className="px-2.5 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-md shadow-teal-600/30 flex items-center gap-1.5 transition-all hover:scale-105 cursor-pointer"
                       >
                         <Bed className="w-3.5 h-3.5" />
-                        <span>🏥 Allocate Ward Bed</span>
+                        <span>
+                          🏥 Allocate Ward Bed {stepDownQueueIndex !== -1 && `(Priority #${stepDownQueueIndex + 1})`}
+                        </span>
                       </button>
                     )}
 
@@ -1228,8 +1400,15 @@ export default function SituationMonitor({
         >
           <form onSubmit={handleCompleteIcuTransfer} className="space-y-4">
             <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-800 space-y-1">
-              <div className="font-bold flex items-center gap-1.5 text-sm text-red-900">
-                <span>🚨 Immediate ICU Upgrade Requested</span>
+              <div className="flex items-center justify-between gap-2">
+                <div className="font-bold flex items-center gap-1.5 text-sm text-red-900">
+                  <span>🚨 Immediate ICU Upgrade Requested</span>
+                </div>
+                {icuTransferQueue.findIndex((p) => p.id === icuTransferPatient.id) !== -1 && (
+                  <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white font-extrabold text-[10px]">
+                    Priority #{icuTransferQueue.findIndex((p) => p.id === icuTransferPatient.id) + 1} of {icuTransferQueue.length} in Queue
+                  </span>
+                )}
               </div>
               <p>
                 Attending Physician requested urgent ICU bed allocation for{' '}
@@ -1238,6 +1417,11 @@ export default function SituationMonitor({
               <p className="text-slate-600">
                 Current Location: {icuTransferPatient.active_admission?.ward} • Bed {icuTransferPatient.active_admission?.bed_number}
               </p>
+              {icuTransferPatient.active_admission?.icu_transfer_requested_at && (
+                <p className="text-[11px] text-red-700 font-mono">
+                  Requested: {new Date(icuTransferPatient.active_admission.icu_transfer_requested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({formatQueueTime(icuTransferPatient.active_admission.icu_transfer_requested_at)})
+                </p>
+              )}
             </div>
 
             <div>
@@ -1319,8 +1503,15 @@ export default function SituationMonitor({
         >
           <form onSubmit={handleCompleteStepDown} className="space-y-4">
             <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl text-xs text-teal-900 space-y-1">
-              <div className="font-bold flex items-center gap-1.5 text-sm text-teal-950">
-                <span>🏥 Transfer from ICU to General Ward</span>
+              <div className="flex items-center justify-between gap-2">
+                <div className="font-bold flex items-center gap-1.5 text-sm text-teal-950">
+                  <span>🏥 Transfer from ICU to General Ward</span>
+                </div>
+                {stepDownQueue.findIndex((p) => p.id === stepDownPatient.id) !== -1 && (
+                  <span className="px-2 py-0.5 rounded-full bg-teal-700 text-white font-extrabold text-[10px]">
+                    Priority #{stepDownQueue.findIndex((p) => p.id === stepDownPatient.id) + 1} of {stepDownQueue.length} in Queue
+                  </span>
+                )}
               </div>
               <p>
                 Patient <strong className="text-slate-900">{stepDownPatient.name}</strong> ({stepDownPatient.patient_code}) is clinically stable and ready for step-down care.
@@ -1328,6 +1519,11 @@ export default function SituationMonitor({
               <p className="text-teal-700">
                 Current Location: {stepDownPatient.active_admission?.ward} • Bed {stepDownPatient.active_admission?.bed_number}
               </p>
+              {stepDownPatient.active_admission?.step_down_requested_at && (
+                <p className="text-[11px] text-teal-700 font-mono">
+                  Requested: {new Date(stepDownPatient.active_admission.step_down_requested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({formatQueueTime(stepDownPatient.active_admission.step_down_requested_at)})
+                </p>
+              )}
               {stepDownPatient.active_admission?.step_down_notes && (
                 <p className="text-slate-600 italic mt-1 bg-white/70 p-2 rounded-lg border border-teal-100">
                   Doctor's Note: "{stepDownPatient.active_admission?.step_down_notes}"

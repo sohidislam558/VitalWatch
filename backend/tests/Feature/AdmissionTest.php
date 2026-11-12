@@ -319,4 +319,59 @@ class AdmissionTest extends TestCase
         $this->assertEquals('Normal & Stable', $patientData3['situation_label']);
         $this->assertEquals('stable', $patientData3['situation_status']);
     }
+
+    public function test_icu_transfer_and_step_down_queues_are_ordered_chronologically_by_fifo_priority(): void
+    {
+        $docHeaders = $this->getAuthHeader('doctor');
+
+        // Create Patient 1 requesting ICU first
+        $patient1 = Patient::create([
+            'patient_code' => 'PAT-QUEUE-001',
+            'name' => 'First ICU Requester',
+            'date_of_birth' => '1980-01-01',
+            'gender' => 'male',
+        ]);
+        $admission1 = Admission::create([
+            'patient_id' => $patient1->id,
+            'ward' => 'General Medical Ward',
+            'bed_number' => 'Bed 101',
+            'admitted_at' => now()->subHours(2),
+            'status' => 'admitted',
+            'icu_transfer_requested' => true,
+            'icu_transfer_requested_at' => now()->subMinutes(15), // Requested 15 mins ago
+            'target_icu_ward' => 'Intensive Care Unit (ICU)',
+        ]);
+
+        // Create Patient 2 requesting ICU later
+        $patient2 = Patient::create([
+            'patient_code' => 'PAT-QUEUE-002',
+            'name' => 'Second ICU Requester',
+            'date_of_birth' => '1985-02-02',
+            'gender' => 'female',
+        ]);
+        $admission2 = Admission::create([
+            'patient_id' => $patient2->id,
+            'ward' => 'Telemetry Observation',
+            'bed_number' => 'Bed 102',
+            'admitted_at' => now()->subHours(2),
+            'status' => 'admitted',
+            'icu_transfer_requested' => true,
+            'icu_transfer_requested_at' => now()->subMinutes(5), // Requested 5 mins ago (LATER)
+            'target_icu_ward' => 'Intensive Care Unit (ICU)',
+        ]);
+
+        // Query dashboard patients list
+        auth()->forgetGuards();
+        $response = $this->withHeaders($docHeaders)->getJson('/api/dashboard/patients');
+        $response->assertStatus(200);
+
+        $patientsList = collect($response->json('data.data'));
+        $index1 = $patientsList->search(fn($p) => $p['id'] === $patient1->id);
+        $index2 = $patientsList->search(fn($p) => $p['id'] === $patient2->id);
+
+        // Patient 1 must be ahead of Patient 2 in queue priority
+        $this->assertNotFalse($index1);
+        $this->assertNotFalse($index2);
+        $this->assertLessThan($index2, $index1, 'First requested ICU patient must hold earlier queue priority than second requested patient.');
+    }
 }

@@ -34,7 +34,7 @@ class DashboardController extends Controller
     {
         $patients = $this->dashboardService->getPatients(
             $request->only(['search', 'ward', 'alert_status']),
-            (int) $request->input('per_page', 10)
+            (int) $request->input('per_page', 50)
         );
 
         return response()->json([

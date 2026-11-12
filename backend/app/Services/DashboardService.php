@@ -47,16 +47,27 @@ class DashboardService
 
     /**
      * Retrieve patient monitoring list with clear, simple human-readable situation descriptions.
+     * Orders priority queues (ICU requests and Step-down requests) by earliest requested time (FIFO).
      */
-    public function getPatients(array $filters = [], int $perPage = 15): LengthAwarePaginator
+    public function getPatients(array $filters = [], int $perPage = 50): LengthAwarePaginator
     {
         $query = Patient::whereHas('activeAdmission')
+            ->select('patients.*')
+            ->leftJoin('admissions', function ($join) {
+                $join->on('admissions.patient_id', '=', 'patients.id')
+                    ->where('admissions.status', '=', 'admitted');
+            })
             ->with([
                 'activeAdmission.icuTransferRequester',
+                'activeAdmission.stepDownRequester',
                 'latestVitalRecord.recorder',
                 'alerts' => fn($q) => $q->whereIn('status', ['active', 'doctor_in_action'])->with(['alertRule', 'acknowledgements.user']),
             ])
-            ->orderBy('id', 'asc');
+            ->orderByRaw('CASE WHEN admissions.icu_transfer_requested = 1 THEN 0 ELSE 1 END ASC')
+            ->orderByRaw('admissions.icu_transfer_requested_at ASC')
+            ->orderByRaw('CASE WHEN admissions.step_down_requested = 1 THEN 0 ELSE 1 END ASC')
+            ->orderByRaw('admissions.step_down_requested_at ASC')
+            ->orderBy('patients.id', 'asc');
 
         if (!empty($filters['search'])) {
             $search = '%' . trim($filters['search']) . '%';
