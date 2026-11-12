@@ -12,7 +12,6 @@ import {
   Stethoscope,
   Mail,
   CheckCircle2,
-  RefreshCw,
   HeartPulse,
   AlertTriangle,
 } from 'lucide-react';
@@ -159,16 +158,6 @@ export default function DoctorPortal() {
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <span>Live Real-Time Sync</span>
           </span>
-
-          <button
-            type="button"
-            onClick={() => loadData(true)}
-            disabled={refreshing}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg shadow-xs transition-colors"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-cyan-600' : 'text-slate-500'}`} />
-            <span>{refreshing ? 'Updating...' : 'Refresh'}</span>
-          </button>
         </div>
       </div>
 
