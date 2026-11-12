@@ -23,6 +23,11 @@ import {
   Search,
   ArrowRight,
   Filter,
+  X,
+  Eye,
+  User,
+  ExternalLink,
+  Sparkles,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -80,9 +85,130 @@ export default function AdminPortal() {
   // Activity Stream Filter and Search States
   const [activitySearch, setActivitySearch] = useState('');
   const [activityCategory, setActivityCategory] = useState('all');
+  const [clinicalOnly, setClinicalOnly] = useState(true);
+  const [selectedActivity, setSelectedActivity] = useState(null);
+
+  // Helper badge descriptor for enterprise audit grid
+  const getActivityBadge = (action) => {
+    if (action.includes('ICU')) {
+      return {
+        label: action === 'EMERGENCY_ICU_TRANSFER_REQUESTED' ? 'ICU Requested' : 'ICU Transfer',
+        color: 'bg-rose-100 text-rose-800 border-rose-200',
+        icon: <Bed className="w-3.5 h-3.5 text-rose-600" />,
+      };
+    }
+    if (action.includes('STEP_DOWN')) {
+      return {
+        label: action === 'STEP_DOWN_REQUESTED' ? 'Step-Down Req' : 'Ward Step-Down',
+        color: 'bg-teal-100 text-teal-800 border-teal-200',
+        icon: <Bed className="w-3.5 h-3.5 text-teal-600" />,
+      };
+    }
+    if (action === 'RECORD_VITALS') {
+      return {
+        label: 'Vitals Entry',
+        color: 'bg-blue-100 text-blue-800 border-blue-200',
+        icon: <HeartHandshake className="w-3.5 h-3.5 text-blue-600" />,
+      };
+    }
+    if (action.startsWith('DOCTOR_')) {
+      return {
+        label: 'Doctor in Action',
+        color: 'bg-cyan-100 text-cyan-800 border-cyan-200',
+        icon: <Stethoscope className="w-3.5 h-3.5 text-cyan-600" />,
+      };
+    }
+    if (action.startsWith('ALERT_RESOLVED') || action.startsWith('ALERT_AUTO_RESOLVED')) {
+      return {
+        label: 'Alarm Resolved',
+        color: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+        icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />,
+      };
+    }
+    if (action.startsWith('ALERT_GENERATED')) {
+      return {
+        label: 'Alarm Triggered',
+        color: 'bg-red-100 text-red-800 border-red-200',
+        icon: <AlertTriangle className="w-3.5 h-3.5 text-red-600" />,
+      };
+    }
+    if (action.startsWith('PATIENT_ADMITTED')) {
+      return {
+        label: 'Admission',
+        color: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+        icon: <Bed className="w-3.5 h-3.5 text-indigo-600" />,
+      };
+    }
+    if (action.startsWith('PATIENT_DISCHARGED')) {
+      return {
+        label: 'Discharge',
+        color: 'bg-slate-100 text-slate-800 border-slate-200',
+        icon: <Activity className="w-3.5 h-3.5 text-slate-600" />,
+      };
+    }
+    return {
+      label: action.replace(/_/g, ' '),
+      color: 'bg-slate-100 text-slate-700 border-slate-200',
+      icon: <Activity className="w-3.5 h-3.5 text-slate-600" />,
+    };
+  };
+
+  const getActivityHighlight = (item) => {
+    const details = item.details || {};
+    if (item.action === 'RECORD_VITALS' && details.heart_rate != null) {
+      return `HR ${details.heart_rate} bpm • BP ${details.systolic_bp}/${details.diastolic_bp} • SpO2 ${details.spo2}% • Temp ${details.temperature}°C`;
+    }
+    if (item.action === 'DOCTOR_IN_ACTION') {
+      return details.notes || details.message || 'Bedside attendance logged by physician';
+    }
+    if (item.action === 'EMERGENCY_ICU_TRANSFER_REQUESTED') {
+      return `Urgent ICU escalation requested: Target ${details.target_ward || 'ICU'}`;
+    }
+    if (item.action === 'PATIENT_TRANSFERRED_TO_ICU') {
+      return `Transfer completed: ${details.from_ward} ➔ ${details.to_ward} (${details.to_bed})`;
+    }
+    if (item.action === 'STEP_DOWN_REQUESTED') {
+      return `Step-down requested to ${details.target_ward || 'General Medical Ward'}`;
+    }
+    if (item.action === 'PATIENT_STEPPED_DOWN') {
+      return `Stepped down from ${details.from_ward} ➔ ${details.to_ward} (${details.to_bed})`;
+    }
+    if (item.action.startsWith('ALERT_')) {
+      return details.rule || details.message || 'Early warning alert threshold event';
+    }
+    if (item.action === 'PATIENT_ADMITTED') {
+      return `Admitted to ${details.ward} (Bed ${details.bed_number}) • ${details.diagnosis || 'Observation'}`;
+    }
+    if (item.action === 'PATIENT_DISCHARGED') {
+      return `Discharged from ${details.ward}`;
+    }
+    if (item.action.startsWith('LOGIN_')) {
+      return `Portal authentication from IP ${details.ip || 'Intranet'}`;
+    }
+    return item.summary;
+  };
+
+  const getActivityTarget = (item) => {
+    const details = item.details || {};
+    if (details.name) {
+      return `${details.name}${details.bed_number ? ` (${details.bed_number})` : ''}`;
+    }
+    if (details.patient_name) {
+      return `${details.patient_name}${details.current_bed ? ` (${details.current_bed})` : ''}`;
+    }
+    if (details.ward) {
+      return `${details.ward}${details.bed_number ? ` (${details.bed_number})` : ''}`;
+    }
+    return '—';
+  };
 
   // Filtered activities
   const filteredActivities = activities.filter((item) => {
+    // Hide routine auth logs when clinicalOnly toggle is active
+    if (clinicalOnly && (item.action.startsWith('LOGIN_') || item.action === 'LOGOUT')) {
+      return false;
+    }
+
     // Category filter
     if (activityCategory === 'vitals') {
       if (item.action !== 'RECORD_VITALS' && item.role !== 'nurse') return false;
@@ -528,8 +654,25 @@ export default function AdminPortal() {
               />
             </div>
 
-            {/* Category Filter Pills */}
-            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            {/* Category Filter Pills & Clinical Only Switch */}
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              {/* Clinical Only Toggle */}
+              <button
+                type="button"
+                onClick={() => setClinicalOnly(!clinicalOnly)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer border ${
+                  clinicalOnly
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs'
+                    : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                }`}
+                title="Toggle between clinical events and system/login audit logs"
+              >
+                <Sparkles className={`w-3.5 h-3.5 ${clinicalOnly ? 'text-emerald-600' : 'text-slate-400'}`} />
+                <span>{clinicalOnly ? 'Clinical Only' : 'All Logs (incl. System)'}</span>
+              </button>
+
+              <div className="h-4 w-px bg-slate-200 hidden sm:block" />
+
               <button
                 type="button"
                 onClick={() => setActivityCategory('all')}
@@ -600,7 +743,7 @@ export default function AdminPortal() {
           ) : (
             <div className="space-y-6">
               {Object.entries(groupedActivities).map(([dateTitle, items]) => (
-                <div key={dateTitle} className="space-y-3">
+                <div key={dateTitle} className="space-y-2.5">
                   {/* Date Section Header */}
                   <div className="flex items-center gap-2.5 px-1 pt-1">
                     <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center flex-shrink-0">
@@ -609,98 +752,368 @@ export default function AdminPortal() {
                     <h4 className="text-xs font-bold text-slate-900 tracking-wide uppercase">
                       {dateTitle}
                     </h4>
-                    <span className="px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-700 text-[10px] font-bold">
-                      {items.length} {items.length === 1 ? 'record' : 'records'}
+                    <span className="px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-700 text-[10px] font-bold font-mono">
+                      {items.length} {items.length === 1 ? 'event' : 'events'}
                     </span>
                     <div className="flex-1 h-px bg-slate-200 ml-2" />
                   </div>
 
-                  {/* Date Items Card */}
-                  <div className="bg-white rounded-xl border border-slate-200 shadow-xs divide-y divide-slate-100 overflow-hidden">
-                    {items.map((item) => {
-                      const isNurseAction = item.role === 'nurse' || item.action === 'RECORD_VITALS';
-                      const isDoctorAction = item.role === 'doctor' || item.action === 'DOCTOR_IN_ACTION' || item.action === 'ALERT_RESOLVED';
-                      const isIcuTransfer = item.action.includes('ICU');
-                      const isStepDown = item.action.includes('STEP_DOWN');
-                      const isAutoResolved = item.action === 'ALERT_AUTO_RESOLVED_BY_NEW_VITALS';
-                      const isAlertGenerated = item.action === 'ALERT_GENERATED';
+                  {/* Date Enterprise Audit Table */}
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-slate-50/90 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                            <th className="py-2.5 px-4 w-24">Time</th>
+                            <th className="py-2.5 px-3 w-40">Event Type</th>
+                            <th className="py-2.5 px-3 w-44">Staff (Actor)</th>
+                            <th className="py-2.5 px-3 w-40">Patient / Ward</th>
+                            <th className="py-2.5 px-4 min-w-[280px]">Clinical Summary</th>
+                            <th className="py-2.5 px-3 w-20 text-right">Inspect</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {items.map((item) => {
+                            const badge = getActivityBadge(item.action);
+                            const target = getActivityTarget(item);
+                            const highlight = getActivityHighlight(item);
+                            const isSelected = selectedActivity?.id === item.id;
 
-                      // Badge background & icon styling
-                      let iconBg = 'bg-slate-100 text-slate-700';
-                      let icon = <Activity className="w-4 h-4" />;
-
-                      if (isStepDown) {
-                        iconBg = 'bg-teal-100 text-teal-800';
-                        icon = <Bed className="w-4 h-4" />;
-                      } else if (isIcuTransfer) {
-                        iconBg = 'bg-rose-100 text-rose-800';
-                        icon = <Bed className="w-4 h-4" />;
-                      } else if (isDoctorAction) {
-                        iconBg = 'bg-cyan-100 text-cyan-800';
-                        icon = <Stethoscope className="w-4 h-4" />;
-                      } else if (isNurseAction) {
-                        iconBg = 'bg-blue-100 text-blue-800';
-                        icon = <HeartHandshake className="w-4 h-4" />;
-                      } else if (isAutoResolved) {
-                        iconBg = 'bg-emerald-100 text-emerald-800';
-                        icon = <CheckCircle2 className="w-4 h-4" />;
-                      } else if (isAlertGenerated) {
-                        iconBg = 'bg-red-100 text-red-800';
-                        icon = <AlertTriangle className="w-4 h-4" />;
-                      }
-
-                      return (
-                        <div
-                          key={item.id}
-                          className="p-4 hover:bg-slate-50/80 transition-colors flex items-start gap-3.5"
-                        >
-                          {/* Action Icon */}
-                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 ${iconBg}`}>
-                            {icon}
-                          </div>
-
-                          {/* Details Content */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-xs font-bold text-slate-900 leading-tight">
-                                {item.summary}
-                              </span>
-                              <span
-                                className={`px-2 py-0.5 text-[9px] font-bold uppercase rounded-md tracking-wider ${
-                                  item.role === 'nurse'
-                                    ? 'bg-blue-100 text-blue-800'
-                                    : item.role === 'doctor'
-                                    ? 'bg-cyan-100 text-cyan-800'
-                                    : item.role === 'admin'
-                                    ? 'bg-slate-900 text-white'
-                                    : 'bg-slate-100 text-slate-700'
+                            return (
+                              <tr
+                                key={item.id}
+                                onClick={() => setSelectedActivity(item)}
+                                className={`hover:bg-blue-50/50 cursor-pointer transition-colors group ${
+                                  isSelected ? 'bg-blue-50/80' : ''
                                 }`}
                               >
-                                {item.role}
-                              </span>
-                            </div>
+                                {/* Time */}
+                                <td className="py-2.5 px-4 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                                  {new Date(item.created_at).toLocaleTimeString([], {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit',
+                                  })}
+                                </td>
 
-                            {/* Human-readable detail tags (ZERO raw JSON) */}
-                            {renderActivityDetails(item)}
-                          </div>
+                                {/* Action / Event Badge */}
+                                <td className="py-2.5 px-3 whitespace-nowrap">
+                                  <span
+                                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${badge.color}`}
+                                  >
+                                    {badge.icon}
+                                    <span>{badge.label}</span>
+                                  </span>
+                                </td>
 
-                          {/* Time */}
-                          <div className="text-[11px] text-slate-400 whitespace-nowrap flex items-center gap-1 font-mono flex-shrink-0 self-start mt-0.5">
-                            <Clock className="w-3 h-3 text-slate-400" />
-                            <span>
-                              {new Date(item.created_at).toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                second: '2-digit',
-                              })}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
+                                {/* Staff / Actor */}
+                                <td className="py-2.5 px-3 whitespace-nowrap">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-semibold text-slate-800">
+                                      {item.user_name || 'System Auto'}
+                                    </span>
+                                    <span
+                                      className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider ${
+                                        item.role === 'nurse'
+                                          ? 'bg-blue-100 text-blue-700'
+                                          : item.role === 'doctor'
+                                          ? 'bg-cyan-100 text-cyan-700'
+                                          : item.role === 'admin'
+                                          ? 'bg-slate-800 text-white'
+                                          : 'bg-slate-100 text-slate-600'
+                                      }`}
+                                    >
+                                      {item.role || 'sys'}
+                                    </span>
+                                  </div>
+                                </td>
+
+                                {/* Patient / Target */}
+                                <td className="py-2.5 px-3 whitespace-nowrap">
+                                  <span className="font-medium text-slate-700 text-xs">{target}</span>
+                                </td>
+
+                                {/* Clinical Highlight */}
+                                <td className="py-2.5 px-4 text-slate-600">
+                                  <p className="truncate max-w-md text-xs font-normal text-slate-700" title={highlight}>
+                                    {highlight}
+                                  </p>
+                                </td>
+
+                                {/* Inspect Button */}
+                                <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedActivity(item);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-blue-700 bg-slate-100 group-hover:bg-blue-100/70 rounded-md transition-colors"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    <span>Detail</span>
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* SLIDE-OVER DETAIL DRAWER */}
+          {selectedActivity && (
+            <div className="fixed inset-0 z-50 overflow-hidden flex justify-end">
+              {/* Backdrop */}
+              <div
+                className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity"
+                onClick={() => setSelectedActivity(null)}
+              />
+
+              {/* Slide-over panel */}
+              <div className="relative w-full max-w-xl bg-white shadow-2xl flex flex-col z-50 border-l border-slate-200 h-full animate-in slide-in-from-right duration-200">
+                {/* Drawer Header */}
+                <div className="p-5 border-b border-slate-200 bg-slate-900 text-white flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      {(() => {
+                        const b = getActivityBadge(selectedActivity.action);
+                        return (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-white/10 text-white border border-white/20">
+                            {b.icon}
+                            <span>{b.label}</span>
+                          </span>
+                        );
+                      })()}
+                      <span className="text-[11px] font-mono text-slate-400">
+                        Event #{selectedActivity.id}
+                      </span>
+                    </div>
+                    <h3 className="text-base font-bold text-white tracking-tight">
+                      {selectedActivity.summary}
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>
+                        {new Date(selectedActivity.created_at).toLocaleString('en-US', {
+                          dateStyle: 'medium',
+                          timeStyle: 'medium',
+                        })}
+                      </span>
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedActivity(null)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Drawer Body */}
+                <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
+                  {/* Staff & Target Context Grid */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                      <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-1">
+                        Actor / Staff Member
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs">
+                          {selectedActivity.user_name ? selectedActivity.user_name.charAt(0) : 'S'}
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-900 text-xs">
+                            {selectedActivity.user_name || 'System Auto-Trigger'}
+                          </p>
+                          <span className="text-[10px] text-slate-500 capitalize">
+                            {selectedActivity.role || 'automated'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                      <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-1">
+                        Target Patient / Location
+                      </span>
+                      <p className="font-bold text-slate-900 text-xs">
+                        {getActivityTarget(selectedActivity)}
+                      </p>
+                      <span className="text-[10px] text-slate-500">
+                        {selectedActivity.details?.ward ? `Ward: ${selectedActivity.details.ward}` : 'Inpatient Ward'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Clinical Payload Visualizer: Bedside Vitals */}
+                  {selectedActivity.action === 'RECORD_VITALS' && selectedActivity.details && (
+                    <div className="space-y-3">
+                      <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-200 pb-1.5">
+                        Recorded Vital Signs Measurements
+                      </h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        <div className="p-3 bg-rose-50 border border-rose-100 rounded-lg">
+                          <span className="text-[10px] text-rose-700 font-bold uppercase">Heart Rate</span>
+                          <p className="text-lg font-bold text-rose-900 mt-0.5">
+                            {selectedActivity.details.heart_rate ?? '—'}{' '}
+                            <span className="text-xs font-normal">bpm</span>
+                          </p>
+                        </div>
+                        <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-lg">
+                          <span className="text-[10px] text-indigo-700 font-bold uppercase">Blood Pressure</span>
+                          <p className="text-lg font-bold text-indigo-900 mt-0.5">
+                            {selectedActivity.details.systolic_bp && selectedActivity.details.diastolic_bp
+                              ? `${selectedActivity.details.systolic_bp}/${selectedActivity.details.diastolic_bp}`
+                              : '—'}{' '}
+                            <span className="text-xs font-normal">mmHg</span>
+                          </p>
+                        </div>
+                        <div className="p-3 bg-cyan-50 border border-cyan-100 rounded-lg">
+                          <span className="text-[10px] text-cyan-700 font-bold uppercase">Oxygen Saturation</span>
+                          <p className="text-lg font-bold text-cyan-900 mt-0.5">
+                            {selectedActivity.details.spo2 ?? '—'}{' '}
+                            <span className="text-xs font-normal">%</span>
+                          </p>
+                        </div>
+                        <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg">
+                          <span className="text-[10px] text-amber-700 font-bold uppercase">Temperature</span>
+                          <p className="text-lg font-bold text-amber-900 mt-0.5">
+                            {selectedActivity.details.temperature ?? '—'}{' '}
+                            <span className="text-xs font-normal">°C</span>
+                          </p>
+                        </div>
+                        <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-lg">
+                          <span className="text-[10px] text-emerald-700 font-bold uppercase">Respiratory Rate</span>
+                          <p className="text-lg font-bold text-emerald-900 mt-0.5">
+                            {selectedActivity.details.respiratory_rate ?? '—'}{' '}
+                            <span className="text-xs font-normal">/min</span>
+                          </p>
+                        </div>
+                      </div>
+                      {selectedActivity.details.clinical_notes && (
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg mt-2">
+                          <span className="text-[10px] text-slate-500 font-bold uppercase block mb-1">
+                            Nurse Clinical Observation Note
+                          </span>
+                          <p className="text-xs text-slate-800 italic">
+                            "{selectedActivity.details.clinical_notes}"
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Transfer Escalation / Step-Down Payload */}
+                  {(selectedActivity.action.includes('ICU') || selectedActivity.action.includes('STEP_DOWN')) && selectedActivity.details && (
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                      <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                        Transfer Workflow Details
+                      </h4>
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <span className="text-slate-500 font-medium block">Source Location:</span>
+                          <span className="font-bold text-slate-800">
+                            {selectedActivity.details.current_ward || selectedActivity.details.from_ward || 'Ward'} (Bed {selectedActivity.details.current_bed || selectedActivity.details.from_bed || '—'})
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 font-medium block">Destination Target:</span>
+                          <span className="font-bold text-slate-800">
+                            {selectedActivity.details.target_ward || selectedActivity.details.to_ward || 'ICU'} {selectedActivity.details.to_bed ? `(Bed ${selectedActivity.details.to_bed})` : ''}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 font-medium block">Requesting Physician:</span>
+                          <span className="font-bold text-slate-800">
+                            Dr. {selectedActivity.details.requester_name || selectedActivity.user_name}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 font-medium block">Transfer Status:</span>
+                          <span className="font-bold text-emerald-700">Verified & Logged</span>
+                        </div>
+                      </div>
+                      {selectedActivity.details.notes && (
+                        <div className="pt-2 border-t border-slate-200">
+                          <span className="text-slate-500 font-medium block mb-0.5">Physician Clinical Rationale:</span>
+                          <p className="text-slate-800 italic bg-white p-2.5 rounded-lg border border-slate-200">
+                            "{selectedActivity.details.notes}"
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Doctor Bedside Intervention Payload */}
+                  {selectedActivity.action.startsWith('DOCTOR_') && selectedActivity.details && (
+                    <div className="p-4 bg-cyan-50/60 border border-cyan-200 rounded-xl space-y-2">
+                      <h4 className="text-xs font-bold text-cyan-900 uppercase tracking-wider flex items-center gap-1.5">
+                        <Stethoscope className="w-4 h-4 text-cyan-700" />
+                        <span>Physician Bedside Attendance</span>
+                      </h4>
+                      <p className="text-xs text-slate-700">
+                        Dr. {selectedActivity.user_name} attended the patient bedside for clinical assessment.
+                      </p>
+                      {selectedActivity.details.notes && (
+                        <div className="bg-white p-3 rounded-lg border border-cyan-100 text-xs text-slate-800">
+                          <span className="text-[10px] font-bold text-slate-500 block mb-1">CLINICAL DIRECTIVE</span>
+                          {selectedActivity.details.notes}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Alert Trigger / Resolution Payload */}
+                  {selectedActivity.action.startsWith('ALERT_') && selectedActivity.details && (
+                    <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-xl space-y-2">
+                      <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4 text-amber-700" />
+                        <span>Threshold Telemetry Alarm</span>
+                      </h4>
+                      <p className="text-xs text-slate-800 font-semibold">
+                        {selectedActivity.details.message || selectedActivity.summary}
+                      </p>
+                      {selectedActivity.details.rule && (
+                        <p className="text-xs text-slate-600">
+                          Trigger Rule: <code className="bg-white px-1.5 py-0.5 rounded border border-amber-200 font-mono text-[11px]">{selectedActivity.details.rule}</code>
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Technical Event Details (Collapsible JSON) */}
+                  <details className="text-[11px] text-slate-500 border border-slate-200 rounded-lg p-3 bg-slate-50">
+                    <summary className="font-bold text-slate-700 cursor-pointer select-none">
+                      Technical Audit Payload (JSON)
+                    </summary>
+                    <pre className="mt-2 p-2 bg-slate-900 text-slate-200 rounded font-mono text-[10px] overflow-x-auto whitespace-pre-wrap">
+                      {JSON.stringify(selectedActivity.details || {}, null, 2)}
+                    </pre>
+                  </details>
+                </div>
+
+                {/* Drawer Footer */}
+                <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-400">
+                    Action: <code className="font-mono text-slate-600 font-bold">{selectedActivity.action}</code>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedActivity(null)}
+                    className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition-colors"
+                  >
+                    Close Inspection
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
