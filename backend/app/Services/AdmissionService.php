@@ -233,7 +233,7 @@ class AdmissionService
                 'icu_transfer_requested_at' => now(),
                 'icu_transfer_requested_by' => $requester->id,
                 'target_icu_ward' => $targetWard ?: 'Intensive Care Unit (ICU)',
-                'icu_transfer_notes' => $notes ?: "Immediate ICU transfer requested by Dr. {$requester->name}. Critical bedside condition.",
+                'icu_transfer_notes' => $notes ?: "Immediate ICU transfer requested by " . User::formatDoctorName($requester->name) . ". Critical bedside condition.",
             ]);
 
             $this->auditService->log(
@@ -372,7 +372,7 @@ class AdmissionService
                 'step_down_requested_at' => now(),
                 'step_down_requested_by' => $requester->id,
                 'target_step_down_ward' => $targetWard ?: 'General Medical Ward',
-                'step_down_notes' => $notes ?: "Step-down to general ward requested by Dr. {$requester->name}. Patient condition is stable and ready for step-down care.",
+                'step_down_notes' => $notes ?: "Step-down to general ward requested by " . User::formatDoctorName($requester->name) . ". Patient condition is stable and ready for step-down care.",
             ]);
 
             $this->auditService->log(

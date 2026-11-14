@@ -100,5 +100,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::patch('/users/{id}/status', [UserController::class, 'updateStatus']);
 
         Route::get('/audit-logs', [AuditController::class, 'index']);
+        Route::delete('/audit-logs/all', [AuditController::class, 'destroyAll']);
+        Route::post('/audit-logs/delete-by-date', [AuditController::class, 'deleteByDate']);
+        Route::delete('/audit-logs/{id}', [AuditController::class, 'destroy']);
     });
 });

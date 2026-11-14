@@ -4,6 +4,9 @@ import { dashboardService } from '../../services/settingsService';
 import { useAuth } from '../../hooks/useAuth';
 import PageContainer from '../../components/layout/PageContainer';
 import SituationMonitor from '../../components/dashboard/SituationMonitor';
+import DateRangePicker from '../../components/common/DateRangePicker';
+import ConfirmDialog from '../../components/common/ConfirmDialog';
+import { cleanPersonName, formatDoctorName, formatNurseName } from '../../utils/formatUser';
 import { onTelemetryUpdate } from '../../utils/realtime';
 import {
   ShieldCheck,
@@ -28,6 +31,7 @@ import {
   User,
   ExternalLink,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -42,6 +46,26 @@ export default function AdminPortal() {
   // Tab switch between Activity Stream and Situation Monitor
   const [activeTab, setActiveTab] = useState('activity'); // 'activity' or 'monitor'
 
+  // Activity Stream Filter and Search States
+  const [activitySearch, setActivitySearch] = useState('');
+  const [activityCategory, setActivityCategory] = useState('all');
+  const [clinicalOnly, setClinicalOnly] = useState(true);
+  const [activityStartDate, setActivityStartDate] = useState('');
+  const [activityEndDate, setActivityEndDate] = useState('');
+  const [selectedActivity, setSelectedActivity] = useState(null);
+
+  // Activity Deletion Modal State
+  const [deleteConfirm, setDeleteConfirm] = useState({
+    isOpen: false,
+    type: null, // 'specific' | 'date' | 'dateRange' | 'all'
+    targetId: null,
+    targetDate: null,
+    targetRange: null,
+    title: '',
+    message: '',
+  });
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
   const loadData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     else setRefreshing(true);
@@ -50,7 +74,10 @@ export default function AdminPortal() {
       const [patientsRes, summaryRes, activitiesRes] = await Promise.all([
         dashboardService.getMonitoringPatients(),
         dashboardService.getSummary(),
-        dashboardService.getActivities(),
+        dashboardService.getActivities({
+          start_date: activityStartDate || undefined,
+          end_date: activityEndDate || undefined,
+        }),
       ]);
 
       setPatients(patientsRes.data?.data || []);
@@ -62,7 +89,7 @@ export default function AdminPortal() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [activityStartDate, activityEndDate]);
 
   useEffect(() => {
     loadData();
@@ -82,11 +109,90 @@ export default function AdminPortal() {
     };
   }, [loadData]);
 
-  // Activity Stream Filter and Search States
-  const [activitySearch, setActivitySearch] = useState('');
-  const [activityCategory, setActivityCategory] = useState('all');
-  const [clinicalOnly, setClinicalOnly] = useState(true);
-  const [selectedActivity, setSelectedActivity] = useState(null);
+  // Open confirmation modal for deletion
+  const openDeleteModal = (type, target) => {
+    if (type === 'specific') {
+      setDeleteConfirm({
+        isOpen: true,
+        type: 'specific',
+        targetId: target.id,
+        title: `Delete Activity Event #${target.id}`,
+        message: `Are you sure you want to delete this activity log event ("${target.summary}")? This action cannot be undone.`,
+      });
+    } else if (type === 'date') {
+      const sampleItem = target.items?.[0];
+      const isoDate = sampleItem
+        ? new Date(sampleItem.created_at).toISOString().split('T')[0]
+        : null;
+      setDeleteConfirm({
+        isOpen: true,
+        type: 'date',
+        targetDate: isoDate,
+        title: `Delete Logs for ${target.dateTitle}`,
+        message: `Are you sure you want to permanently delete all ${target.items.length} activity log event(s) recorded on ${target.dateTitle}? This cannot be undone.`,
+      });
+    } else if (type === 'dateRange') {
+      const desc = target.startDate && target.endDate
+        ? `${target.startDate} to ${target.endDate}`
+        : target.startDate ? `from ${target.startDate} onwards` : `up to ${target.endDate}`;
+      setDeleteConfirm({
+        isOpen: true,
+        type: 'dateRange',
+        targetRange: target,
+        title: 'Delete Logs in Date Range',
+        message: `Are you sure you want to permanently delete all activity log events recorded ${desc}? This action cannot be undone.`,
+      });
+    } else if (type === 'all') {
+      setDeleteConfirm({
+        isOpen: true,
+        type: 'all',
+        title: 'Purge ALL Activity Logs',
+        message: `Permanent Deletion Warning: Are you sure you want to permanently delete ALL ${activities.length} activity log events in the hospital system? This will clear the entire audit trail and cannot be undone.`,
+      });
+    }
+  };
+
+  // Perform deletion after confirmation
+  const handleConfirmDelete = async () => {
+    setDeleteLoading(true);
+    try {
+      if (deleteConfirm.type === 'specific') {
+        await dashboardService.deleteActivity(deleteConfirm.targetId);
+        toast.success(`Activity log #${deleteConfirm.targetId} deleted.`);
+        if (selectedActivity?.id === deleteConfirm.targetId) {
+          setSelectedActivity(null);
+        }
+      } else if (deleteConfirm.type === 'date') {
+        const res = await dashboardService.deleteActivitiesByDate({
+          date: deleteConfirm.targetDate,
+        });
+        toast.success(res.message || 'Date logs deleted successfully.');
+        if (
+          selectedActivity &&
+          new Date(selectedActivity.created_at).toISOString().split('T')[0] === deleteConfirm.targetDate
+        ) {
+          setSelectedActivity(null);
+        }
+      } else if (deleteConfirm.type === 'dateRange') {
+        const res = await dashboardService.deleteActivitiesByDate({
+          start_date: deleteConfirm.targetRange?.startDate,
+          end_date: deleteConfirm.targetRange?.endDate,
+        });
+        toast.success(res.message || 'Date range logs deleted successfully.');
+        setSelectedActivity(null);
+      } else if (deleteConfirm.type === 'all') {
+        const res = await dashboardService.clearAllActivities();
+        toast.success(res.message || 'All activity logs permanently cleared.');
+        setSelectedActivity(null);
+      }
+      setDeleteConfirm({ isOpen: false, type: null });
+      await loadData(false);
+    } catch {
+      toast.error('Failed to delete activity log.');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
 
   // Helper badge descriptor for enterprise audit grid
   const getActivityBadge = (action) => {
@@ -230,6 +336,18 @@ export default function AdminPortal() {
         return false;
     }
 
+    // Date filter
+    if (activityStartDate) {
+      const itemDate = new Date(item.created_at);
+      const start = new Date(activityStartDate + 'T00:00:00');
+      if (itemDate < start) return false;
+    }
+    if (activityEndDate) {
+      const itemDate = new Date(item.created_at);
+      const end = new Date(activityEndDate + 'T23:59:59');
+      if (itemDate > end) return false;
+    }
+
     // Search query
     if (activitySearch.trim()) {
       const q = activitySearch.toLowerCase();
@@ -331,7 +449,7 @@ export default function AdminPortal() {
             From: {details.current_ward} • Bed {details.current_bed}
           </span>
           <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-medium">
-            Dr. {details.requester_name || item.user_name}
+            {formatDoctorName(details.requester_name || item.user_name)}
           </span>
           {details.notes && (
             <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 italic border border-amber-200">
@@ -370,7 +488,7 @@ export default function AdminPortal() {
             Current: {details.current_ward} • Bed {details.current_bed}
           </span>
           <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-medium">
-            Dr. {details.requester_name || item.user_name}
+            {formatDoctorName(details.requester_name || item.user_name)}
           </span>
           {details.notes && (
             <span className="px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 italic border border-teal-200">
@@ -403,7 +521,7 @@ export default function AdminPortal() {
       return (
         <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px]">
           <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 font-bold">
-            🩺 Bedside Attendance: Dr. {item.user_name}
+            🩺 Bedside Attendance: {formatDoctorName(item.user_name)}
           </span>
           {details.message && (
             <span className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 font-medium border border-rose-100">
@@ -633,10 +751,128 @@ export default function AdminPortal() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2 self-start sm:self-auto">
+            <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
               <span className="px-2.5 py-1 rounded-full bg-white/10 text-emerald-300 text-[11px] font-mono border border-white/10">
                 {activities.length} Total Events
               </span>
+              <button
+                type="button"
+                onClick={() => openDeleteModal('all')}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 hover:text-white text-[11px] font-semibold border border-rose-500/30 transition-all cursor-pointer"
+                title="Permanently wipe all activity log history"
+              >
+                <Trash2 className="w-3 h-3 text-rose-400" />
+                <span>Clear All Logs</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Calendar Date Filtration Bar */}
+          <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 text-slate-600 font-bold text-[11px] uppercase tracking-wider mr-1">
+                <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                <span>Calendar Date Filter:</span>
+              </div>
+              <DateRangePicker
+                startDate={activityStartDate}
+                endDate={activityEndDate}
+                onStartDateChange={(d) => setActivityStartDate(d)}
+                onEndDateChange={(d) => setActivityEndDate(d)}
+              />
+              {(activityStartDate || activityEndDate) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivityStartDate('');
+                    setActivityEndDate('');
+                  }}
+                  className="px-2.5 py-1 rounded-md text-[11px] text-blue-600 hover:text-blue-800 font-semibold hover:bg-blue-50 transition-colors cursor-pointer"
+                >
+                  Clear Dates
+                </button>
+              )}
+            </div>
+
+            {/* Quick Presets & Range Deletion */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mr-1">
+                Quick:
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  setActivityStartDate(todayStr);
+                  setActivityEndDate(todayStr);
+                }}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
+                  activityStartDate === new Date().toISOString().split('T')[0] &&
+                  activityEndDate === new Date().toISOString().split('T')[0]
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const yest = new Date();
+                  yest.setDate(yest.getDate() - 1);
+                  const yestStr = yest.toISOString().split('T')[0];
+                  setActivityStartDate(yestStr);
+                  setActivityEndDate(yestStr);
+                }}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
+                  activityStartDate &&
+                  activityStartDate === activityEndDate &&
+                  activityStartDate === new Date(Date.now() - 86400000).toISOString().split('T')[0]
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                Yesterday
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const end = new Date().toISOString().split('T')[0];
+                  const start = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+                  setActivityStartDate(start);
+                  setActivityEndDate(end);
+                }}
+                className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all cursor-pointer"
+              >
+                Last 7 Days
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActivityStartDate('');
+                  setActivityEndDate('');
+                }}
+                className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all cursor-pointer"
+              >
+                All Dates
+              </button>
+
+              {(activityStartDate || activityEndDate) && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    openDeleteModal('dateRange', {
+                      startDate: activityStartDate,
+                      endDate: activityEndDate,
+                    })
+                  }
+                  className="ml-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors cursor-pointer"
+                  title="Delete all logs within this selected date range"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Delete Selected Range</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -745,17 +981,30 @@ export default function AdminPortal() {
               {Object.entries(groupedActivities).map(([dateTitle, items]) => (
                 <div key={dateTitle} className="space-y-2.5">
                   {/* Date Section Header */}
-                  <div className="flex items-center gap-2.5 px-1 pt-1">
-                    <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center flex-shrink-0">
-                      <Calendar className="w-3.5 h-3.5" />
+                  <div className="flex items-center justify-between gap-2.5 px-1 pt-1">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center flex-shrink-0">
+                        <Calendar className="w-3.5 h-3.5" />
+                      </div>
+                      <h4 className="text-xs font-bold text-slate-900 tracking-wide uppercase">
+                        {dateTitle}
+                      </h4>
+                      <span className="px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-700 text-[10px] font-bold font-mono">
+                        {items.length} {items.length === 1 ? 'event' : 'events'}
+                      </span>
                     </div>
-                    <h4 className="text-xs font-bold text-slate-900 tracking-wide uppercase">
-                      {dateTitle}
-                    </h4>
-                    <span className="px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-700 text-[10px] font-bold font-mono">
-                      {items.length} {items.length === 1 ? 'event' : 'events'}
-                    </span>
-                    <div className="flex-1 h-px bg-slate-200 ml-2" />
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openDeleteModal('date', { dateTitle, items })}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-md transition-colors cursor-pointer"
+                        title={`Delete all ${items.length} logs for ${dateTitle}`}
+                      >
+                        <Trash2 className="w-3 h-3 text-rose-500" />
+                        <span>Delete Day's Logs</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Date Enterprise Audit Table */}
@@ -768,8 +1017,8 @@ export default function AdminPortal() {
                             <th className="py-2.5 px-3 w-40">Event Type</th>
                             <th className="py-2.5 px-3 w-44">Staff (Actor)</th>
                             <th className="py-2.5 px-3 w-40">Patient / Ward</th>
-                            <th className="py-2.5 px-4 min-w-[280px]">Clinical Summary</th>
-                            <th className="py-2.5 px-3 w-20 text-right">Inspect</th>
+                            <th className="py-2.5 px-4 min-w-[260px]">Clinical Summary</th>
+                            <th className="py-2.5 px-3 w-28 text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -810,7 +1059,7 @@ export default function AdminPortal() {
                                 <td className="py-2.5 px-3 whitespace-nowrap">
                                   <div className="flex items-center gap-1.5">
                                     <span className="font-semibold text-slate-800">
-                                      {item.user_name || 'System Auto'}
+                                      {item.user_name ? cleanPersonName(item.user_name) : 'System Auto'}
                                     </span>
                                     <span
                                       className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider ${
@@ -840,19 +1089,33 @@ export default function AdminPortal() {
                                   </p>
                                 </td>
 
-                                {/* Inspect Button */}
+                                {/* Actions: Inspect & Delete */}
                                 <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedActivity(item);
-                                    }}
-                                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-blue-700 bg-slate-100 group-hover:bg-blue-100/70 rounded-md transition-colors"
-                                  >
-                                    <Eye className="w-3.5 h-3.5" />
-                                    <span>Detail</span>
-                                  </button>
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedActivity(item);
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-blue-700 bg-slate-100 group-hover:bg-blue-100/70 rounded-md transition-colors"
+                                      title="View event details"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                      <span>Detail</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        openDeleteModal('specific', item);
+                                      }}
+                                      className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                                      title="Delete this activity log event"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -1033,7 +1296,7 @@ export default function AdminPortal() {
                         <div>
                           <span className="text-slate-500 font-medium block">Requesting Physician:</span>
                           <span className="font-bold text-slate-800">
-                            Dr. {selectedActivity.details.requester_name || selectedActivity.user_name}
+                            {formatDoctorName(selectedActivity.details.requester_name || selectedActivity.user_name)}
                           </span>
                         </div>
                         <div>
@@ -1060,7 +1323,7 @@ export default function AdminPortal() {
                         <span>Physician Bedside Attendance</span>
                       </h4>
                       <p className="text-xs text-slate-700">
-                        Dr. {selectedActivity.user_name} attended the patient bedside for clinical assessment.
+                        {formatDoctorName(selectedActivity.user_name)} attended the patient bedside for clinical assessment.
                       </p>
                       {selectedActivity.details.notes && (
                         <div className="bg-white p-3 rounded-lg border border-cyan-100 text-xs text-slate-800">
@@ -1088,30 +1351,29 @@ export default function AdminPortal() {
                       )}
                     </div>
                   )}
-
-                  {/* Technical Event Details (Collapsible JSON) */}
-                  <details className="text-[11px] text-slate-500 border border-slate-200 rounded-lg p-3 bg-slate-50">
-                    <summary className="font-bold text-slate-700 cursor-pointer select-none">
-                      Technical Audit Payload (JSON)
-                    </summary>
-                    <pre className="mt-2 p-2 bg-slate-900 text-slate-200 rounded font-mono text-[10px] overflow-x-auto whitespace-pre-wrap">
-                      {JSON.stringify(selectedActivity.details || {}, null, 2)}
-                    </pre>
-                  </details>
                 </div>
 
                 {/* Drawer Footer */}
                 <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
-                  <span className="text-[11px] text-slate-400">
-                    Action: <code className="font-mono text-slate-600 font-bold">{selectedActivity.action}</code>
-                  </span>
                   <button
                     type="button"
-                    onClick={() => setSelectedActivity(null)}
-                    className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition-colors"
+                    onClick={() => openDeleteModal('specific', selectedActivity)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors cursor-pointer"
+                    title="Permanently delete this event from the audit trail"
                   >
-                    Close Inspection
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Event</span>
                   </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedActivity(null)}
+                      className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                    >
+                      Close Inspection
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1127,6 +1389,19 @@ export default function AdminPortal() {
           onRefresh={() => loadData(true)}
         />
       )}
+
+      {/* Activity Deletion Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        onClose={() => setDeleteConfirm({ isOpen: false, type: null })}
+        onConfirm={handleConfirmDelete}
+        title={deleteConfirm.title}
+        message={deleteConfirm.message}
+        confirmText={deleteConfirm.type === 'all' ? 'Purge All Logs' : 'Delete'}
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleteLoading}
+      />
     </PageContainer>
   );
 }

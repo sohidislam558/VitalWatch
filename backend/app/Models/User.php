@@ -34,6 +34,66 @@ class User extends Authenticatable
         ];
     }
 
+    /**
+     * Mutator to sanitize person name and strip duplicate doctor/nurse prefixes.
+     */
+    protected function name(): \Illuminate\Database\Eloquent\Casts\Attribute
+    {
+        return \Illuminate\Database\Eloquent\Casts\Attribute::make(
+            set: fn (?string $value) => self::cleanPersonName($value),
+        );
+    }
+
+    /**
+     * Strips leading Dr. / Doctor / Nurse prefixes cleanly.
+     */
+    public static function cleanPersonName(?string $name): string
+    {
+        if (!$name) {
+            return '';
+        }
+        $cleaned = trim($name);
+        while (preg_match('/^(dr\.?|doctor|nurse)\s+/i', $cleaned)) {
+            $cleaned = trim(preg_replace('/^(dr\.?|doctor|nurse)\s+/i', '', $cleaned));
+        }
+        return $cleaned;
+    }
+
+    /**
+     * Format a doctor's name safely without double prefixing.
+     */
+    public static function formatDoctorName(?string $name): string
+    {
+        $clean = self::cleanPersonName($name);
+        return $clean ? "Dr. {$clean}" : 'Attending Physician';
+    }
+
+    /**
+     * Format a nurse's name safely without double prefixing.
+     */
+    public static function formatNurseName(?string $name): string
+    {
+        $clean = self::cleanPersonName($name);
+        return $clean ? "Nurse {$clean}" : 'Ward Nurse';
+    }
+
+    /**
+     * Format a name according to staff role.
+     */
+    public static function formatRoleName(?string $name, ?string $role = null): string
+    {
+        if (!$name) {
+            return 'Staff';
+        }
+        if ($role === 'doctor') {
+            return self::formatDoctorName($name);
+        }
+        if ($role === 'nurse') {
+            return self::formatNurseName($name);
+        }
+        return self::cleanPersonName($name);
+    }
+
     public function isAdmin(): bool
     {
         return $this->role === 'admin';

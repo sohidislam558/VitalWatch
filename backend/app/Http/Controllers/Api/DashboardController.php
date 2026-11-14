@@ -66,7 +66,9 @@ class DashboardController extends Controller
     public function activities(Request $request): JsonResponse
     {
         $activities = $this->dashboardService->getActivities(
-            (int) $request->input('limit', 30)
+            startDate: $request->input('start_date'),
+            endDate: $request->input('end_date'),
+            limit: (int) $request->input('limit', 200)
         );
 
         return response()->json([
