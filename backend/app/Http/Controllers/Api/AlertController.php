@@ -112,7 +112,7 @@ class AlertController extends Controller
         $this->authorize('resolve', $alert);
 
         $doctorName = $request->user()->name;
-        $note = $request->input('note') ?: "Bedside clinical assessment completed by Dr. {$doctorName}. Emergency resolved.";
+        $note = $request->input('note') ?: "Bedside clinical assessment completed by " . \App\Models\User::formatDoctorName($doctorName) . ". Emergency resolved.";
 
         $updated = $this->alertService->resolve(
             $alert,

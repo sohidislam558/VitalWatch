@@ -144,7 +144,7 @@ class AlertService
             }
         }
 
-        $actionNote = $note ?: "Doctor in Action: Dr. {$user->name} is actively responding to emergency alarms at bedside.";
+        $actionNote = $note ?: "Doctor in Action: " . User::formatDoctorName($user->name) . " is actively responding to emergency alarms at bedside.";
 
         // Transition ALL active emergency alerts for this patient to doctor_in_action!
         $patientAlerts = Alert::where('patient_id', $alert->patient_id)
@@ -220,7 +220,7 @@ class AlertService
      */
     public function resolve(Alert $alert, User $user, ?string $note, string $ip): Alert
     {
-        $actionNote = $note ?: "Bedside assessment completed by Dr. {$user->name}. Clinical alert resolved.";
+        $actionNote = $note ?: "Bedside assessment completed by " . User::formatDoctorName($user->name) . ". Clinical alert resolved.";
 
         // Resolve ALL active, acknowledged, or doctor_in_action alerts for this patient!
         $patientAlerts = Alert::where('patient_id', $alert->patient_id)

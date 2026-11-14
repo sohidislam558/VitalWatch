@@ -28,6 +28,7 @@ import Button from '../common/Button';
 import Input from '../common/Input';
 import Textarea from '../common/Textarea';
 import Modal from '../common/Modal';
+import { formatDoctorName, formatNurseName } from '../../utils/formatUser';
 import LoadingSpinner from '../common/LoadingSpinner';
 import EmptyState from '../common/EmptyState';
 import { WARDS } from '../../utils/constants';
@@ -172,7 +173,7 @@ export default function SituationMonitor({
     try {
       await alertService.markDoctorInAction(
         actionAlert.id,
-        doctorNote || `Dr. ${user?.name || 'Attending Physician'} actively attending bedside.`
+        doctorNote || `${formatDoctorName(user?.name)} actively attending bedside.`
       );
       toast.success('Bedside attendance logged: Doctor in Action!');
       setActionAlert(null);
@@ -222,7 +223,7 @@ export default function SituationMonitor({
     setRequestingIcuId(patient.id);
     try {
       await admissionService.requestIcuTransfer(admissionId, {
-        notes: `Immediate ICU transfer requested by Dr. ${user?.name || 'Physician'}. Patient condition deteriorating.`,
+        notes: `Immediate ICU transfer requested by ${formatDoctorName(user?.name)}. Patient condition deteriorating.`,
         target_ward: 'Intensive Care Unit (ICU)',
       });
       toast.success(
@@ -309,7 +310,7 @@ export default function SituationMonitor({
     setRequestingStepDownId(patient.id);
     try {
       await admissionService.requestStepDown(admissionId, {
-        notes: `Step-down to general ward requested by Dr. ${user?.name || 'Physician'}. Patient condition is stable.`,
+        notes: `Step-down to general ward requested by ${formatDoctorName(user?.name)}. Patient condition is stable.`,
         target_ward: 'General Medical Ward',
       });
       toast.success(
@@ -997,7 +998,7 @@ export default function SituationMonitor({
                         : 'No measurements yet'}
                     </span>
                     {vitals?.recorder && (
-                      <span className="font-medium text-slate-600">By: Nurse {vitals.recorder.name}</span>
+                      <span className="font-medium text-slate-600">By: {formatNurseName(vitals.recorder.name)}</span>
                     )}
                   </div>
                 </div>
@@ -1083,7 +1084,7 @@ export default function SituationMonitor({
                               onClick={() => {
                                 setActionAlert(activeEmergencyAlert);
                                 setActionPatient(patient);
-                                setDoctorNote(`Dr. ${user?.name || 'Physician'} attending bedside for ${activeEmergencyAlert.message}`);
+                                setDoctorNote(`${formatDoctorName(user?.name)} attending bedside for ${activeEmergencyAlert.message}`);
                               }}
                               className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-500/20 flex items-center gap-1.5 transition-all hover:scale-105"
                             >

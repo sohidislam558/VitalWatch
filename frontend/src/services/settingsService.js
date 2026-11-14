@@ -42,5 +42,20 @@ export const dashboardService = {
     const response = await api.get('/dashboard/activities', { params });
     return response.data;
   },
+
+  async deleteActivity(id) {
+    const response = await api.delete(`/audit-logs/${id}`);
+    return response.data;
+  },
+
+  async deleteActivitiesByDate(params) {
+    const response = await api.post('/audit-logs/delete-by-date', params);
+    return response.data;
+  },
+
+  async clearAllActivities() {
+    const response = await api.delete('/audit-logs/all');
+    return response.data;
+  },
 };
 

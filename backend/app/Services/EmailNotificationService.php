@@ -121,7 +121,7 @@ class EmailNotificationService
                 'status' => 'sent',
                 'sent_at' => now(),
                 'created_at' => now(),
-                'error_message' => "Emergency ICU transfer requested by Dr. {$requester->name} to {$targetWard}.",
+                'error_message' => "Emergency ICU transfer requested by " . \App\Models\User::formatDoctorName($requester->name) . " to {$targetWard}.",
             ]);
         }
     }

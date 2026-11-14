@@ -6,6 +6,7 @@ use App\Models\Admission;
 use App\Models\Alert;
 use App\Models\AuditLog;
 use App\Models\Patient;
+use App\Models\User;
 use App\Models\VitalRecord;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -96,7 +97,7 @@ class DashboardService
 
             if ($doctorInActionAlerts->isNotEmpty()) {
                 $ackDoctor = $doctorInActionAlerts->first()->acknowledgements->where('action', 'doctor_in_action')->last()?->user?->name;
-                $doctorText = $ackDoctor ? "Dr. {$ackDoctor}" : "Attending Doctor";
+                $doctorText = $ackDoctor ? User::formatDoctorName($ackDoctor) : "Attending Doctor";
 
                 $status = 'doctor_in_action';
                 $combined = $doctorInActionAlerts->pluck('message')->unique()->implode(' • ');
@@ -258,11 +259,19 @@ class DashboardService
      * Retrieve full chronological hospital activity stream for Admin oversight.
      * Shows all vitals taken by nurses and all actions taken by doctors.
      */
-    public function getActivities(int $limit = 40): Collection
+    public function getActivities(?string $startDate = null, ?string $endDate = null, int $limit = 200): Collection
     {
-        return AuditLog::with('user')
-            ->orderBy('created_at', 'desc')
-            ->take($limit)
+        $query = AuditLog::with('user')->orderBy('created_at', 'desc');
+
+        if ($startDate) {
+            $query->where('created_at', '>=', $startDate . ' 00:00:00');
+        }
+
+        if ($endDate) {
+            $query->where('created_at', '<=', $endDate . ' 23:59:59');
+        }
+
+        return $query->take($limit)
             ->get()
             ->map(function ($log) {
                 $role = $log->user?->role ?? 'system';
@@ -275,20 +284,23 @@ class DashboardService
                 $ward = $details['ward'] ?? 'Ward';
                 $bed = $details['bed_number'] ?? '';
 
+                $nurseTitle = User::formatNurseName($userName);
+                $doctorTitle = User::formatDoctorName($userName);
+
                 $summary = match ($log->action) {
-                    'RECORD_VITALS' => "Nurse {$userName} entered bedside vital signs (Patient ID: #{$log->entity_id})",
-                    'DOCTOR_IN_ACTION' => "Doctor {$userName} responded to emergency alarm: 'Doctor in Action' (Alert #{$log->entity_id})",
+                    'RECORD_VITALS' => "{$nurseTitle} entered bedside vital signs (Patient ID: #{$log->entity_id})",
+                    'DOCTOR_IN_ACTION' => "{$doctorTitle} responded to emergency alarm: 'Doctor in Action' (Alert #{$log->entity_id})",
                     'ALERT_ACKNOWLEDGED' => "{$userName} acknowledged early warning alert #{$log->entity_id}",
-                    'ALERT_RESOLVED' => "Doctor {$userName} formally resolved alert #{$log->entity_id}",
-                    'ALERT_AUTO_RESOLVED_BY_NEW_VITALS' => "System: Alert #{$log->entity_id} auto-resolved following normal vitals recorded by Nurse {$userName}",
+                    'ALERT_RESOLVED' => "{$doctorTitle} formally resolved alert #{$log->entity_id}",
+                    'ALERT_AUTO_RESOLVED_BY_NEW_VITALS' => "System: Alert #{$log->entity_id} auto-resolved following normal vitals recorded by {$nurseTitle}",
                     'ALERT_GENERATED' => "Early Warning Alert triggered: {$ruleName}",
                     'PATIENT_REGISTERED' => "Staff {$userName} registered patient '{$patientName}' ({$patientCode})",
                     'PATIENT_ADMITTED' => "Patient admitted to {$ward} (Bed {$bed}) by {$userName}",
                     'PATIENT_DISCHARGED' => "Patient discharged from {$ward} by {$userName}",
-                    'EMERGENCY_ICU_TRANSFER_REQUESTED' => "Dr. {$userName} requested emergency ICU transfer for {$patientName} ({$details['current_ward']}, Bed {$details['current_bed']})",
+                    'EMERGENCY_ICU_TRANSFER_REQUESTED' => "{$doctorTitle} requested emergency ICU transfer for {$patientName} ({$details['current_ward']}, Bed {$details['current_bed']})",
                     'PATIENT_TRANSFERRED_TO_ICU' => "{$userName} completed ICU transfer to {$details['to_ward']} ({$details['to_bed']})",
                     'ICU_TRANSFER_REQUEST_CANCELLED' => "{$userName} cancelled ICU transfer request",
-                    'STEP_DOWN_REQUESTED' => "Dr. {$userName} requested ward step-down for {$patientName} ({$details['current_ward']}, Bed {$details['current_bed']})",
+                    'STEP_DOWN_REQUESTED' => "{$doctorTitle} requested ward step-down for {$patientName} ({$details['current_ward']}, Bed {$details['current_bed']})",
                     'PATIENT_STEPPED_DOWN' => "{$userName} completed ward step-down to {$details['to_ward']} ({$details['to_bed']})",
                     'STEP_DOWN_CANCELLED' => "{$userName} cancelled ward step-down request",
                     'LOGIN_SUCCESS' => "{$userName} signed in to hospital portal",

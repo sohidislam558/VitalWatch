@@ -8,6 +8,7 @@ import { onTelemetryUpdate, broadcastTelemetryUpdate } from '../../utils/realtim
 import PageContainer from '../../components/layout/PageContainer';
 import SituationMonitor from '../../components/dashboard/SituationMonitor';
 import Button from '../../components/common/Button';
+import { formatDoctorName } from '../../utils/formatUser';
 import {
   Stethoscope,
   Mail,
@@ -113,7 +114,7 @@ export default function DoctorPortal() {
     setIcuTransferSubmitting(true);
     try {
       await admissionService.requestIcuTransfer(admissionId, {
-        notes: `Immediate ICU transfer requested by Dr. ${user?.name || 'Physician'}. Critical bedside deterioration.`,
+        notes: `Immediate ICU transfer requested by ${formatDoctorName(user?.name)}. Critical bedside deterioration.`,
         target_ward: 'Intensive Care Unit (ICU)',
       });
       toast.success(
@@ -148,7 +149,7 @@ export default function DoctorPortal() {
               Attending Physician Situation Telemetry
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Welcome, <span className="font-semibold text-slate-700">Dr. {user?.name}</span> (MD) • Early Warning Response & Bedside Action
+              Welcome, <span className="font-semibold text-slate-700">{formatDoctorName(user?.name)}</span> (MD) • Early Warning Response & Bedside Action
             </p>
           </div>
         </div>
