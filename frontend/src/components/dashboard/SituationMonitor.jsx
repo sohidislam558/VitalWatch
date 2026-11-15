@@ -242,6 +242,17 @@ export default function SituationMonitor({
 
   // Open ICU Bed Allocation Modal (Nurse / Admin)
   const openIcuTransferModal = (patient) => {
+    // Enforce strict FIFO priority queue: Priority #1 patient must be allocated first
+    const queueIndex = icuTransferQueue.findIndex((p) => p.id === patient?.id);
+    if (queueIndex > 0) {
+      const topPatient = icuTransferQueue[0];
+      toast.error(
+        `Strict Priority Policy: Cannot allocate bed for Priority #${queueIndex + 1} (${patient.name}). Patient '${topPatient?.name}' holds Priority #1 and must be allocated first!`,
+        { duration: 6000 }
+      );
+      return;
+    }
+
     setIcuTransferPatient(patient);
     const targetWard = patient.active_admission?.target_icu_ward || 'Intensive Care Unit (ICU)';
     setIcuTransferWard(targetWard);
@@ -329,6 +340,17 @@ export default function SituationMonitor({
 
   // Open Step-Down Bed Allocation Modal (Nurse / Admin)
   const openStepDownModal = (patient) => {
+    // Enforce strict FIFO priority queue: Priority #1 patient must be allocated first
+    const queueIndex = stepDownQueue.findIndex((p) => p.id === patient?.id);
+    if (queueIndex > 0) {
+      const topPatient = stepDownQueue[0];
+      toast.error(
+        `Strict Priority Policy: Cannot allocate bed for Priority #${queueIndex + 1} (${patient.name}). Patient '${topPatient?.name}' holds Priority #1 and must be allocated first!`,
+        { duration: 6000 }
+      );
+      return;
+    }
+
     setStepDownPatient(patient);
     const targetWard = patient.active_admission?.target_step_down_ward || 'General Medical Ward';
     setStepDownWard(targetWard);
@@ -683,13 +705,18 @@ export default function SituationMonitor({
                     <button
                       type="button"
                       onClick={() => openIcuTransferModal(patient)}
-                      className={`w-full py-1.5 px-2.5 rounded text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                      className={`w-full py-1.5 px-2.5 rounded text-xs font-bold transition-all flex items-center justify-center gap-1 ${
                         isFirstPriority
-                          ? 'bg-white text-red-700 hover:bg-red-50 shadow-sm'
-                          : 'bg-white/20 text-white hover:bg-white/30'
+                          ? 'bg-white text-red-700 hover:bg-red-50 shadow-sm cursor-pointer'
+                          : 'bg-black/30 text-red-200 border border-red-400/20 hover:bg-black/40 cursor-not-allowed opacity-80'
                       }`}
+                      title={!isFirstPriority ? `Locked: Strict Priority Queue. Patient '${icuTransferQueue[0]?.name}' holds Priority #1 and must be allocated first.` : undefined}
                     >
-                      <span>Allocate Bed (Priority #{index + 1})</span>
+                      {isFirstPriority ? (
+                        <span>Allocate Bed (Priority #1)</span>
+                      ) : (
+                        <span>🔒 Awaiting Priority #1 ({icuTransferQueue[0]?.name})</span>
+                      )}
                     </button>
                   )}
                 </div>
@@ -782,13 +809,18 @@ export default function SituationMonitor({
                     <button
                       type="button"
                       onClick={() => openStepDownModal(patient)}
-                      className={`w-full py-1.5 px-2.5 rounded text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                      className={`w-full py-1.5 px-2.5 rounded text-xs font-bold transition-all flex items-center justify-center gap-1 ${
                         isFirstPriority
-                          ? 'bg-white text-teal-800 hover:bg-teal-50 shadow-sm'
-                          : 'bg-white/20 text-white hover:bg-white/30'
+                          ? 'bg-white text-teal-800 hover:bg-teal-50 shadow-sm cursor-pointer'
+                          : 'bg-black/30 text-teal-200 border border-teal-400/20 hover:bg-black/40 cursor-not-allowed opacity-80'
                       }`}
+                      title={!isFirstPriority ? `Locked: Strict Priority Queue. Patient '${stepDownQueue[0]?.name}' holds Priority #1 and must be allocated first.` : undefined}
                     >
-                      <span>Allocate Bed (Priority #{index + 1})</span>
+                      {isFirstPriority ? (
+                        <span>Allocate Bed (Priority #1)</span>
+                      ) : (
+                        <span>🔒 Awaiting Priority #1 ({stepDownQueue[0]?.name})</span>
+                      )}
                     </button>
                   )}
                 </div>
@@ -1130,30 +1162,56 @@ export default function SituationMonitor({
 
                     {/* NURSE / ADMIN ICU BED ALLOCATION BUTTON */}
                     {(isNurse || isAdmin) && patient.active_admission?.icu_transfer_requested && (
-                      <button
-                        type="button"
-                        onClick={() => openIcuTransferModal(patient)}
-                        className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md shadow-rose-500/30 flex items-center gap-1.5 animate-pulse transition-all hover:scale-105 cursor-pointer"
-                      >
-                        <Bed className="w-3.5 h-3.5" />
-                        <span>
-                          🚑 Allocate ICU Bed {icuQueueIndex !== -1 && `(Priority #${icuQueueIndex + 1})`}
-                        </span>
-                      </button>
+                      (() => {
+                        const isFirstPriority = icuQueueIndex === 0;
+                        const firstPatient = icuTransferQueue[0];
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => openIcuTransferModal(patient)}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                              isFirstPriority
+                                ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-md shadow-rose-500/30 animate-pulse hover:scale-105 cursor-pointer'
+                                : 'bg-slate-100 text-slate-500 border border-slate-300 hover:bg-slate-200 cursor-not-allowed opacity-85'
+                            }`}
+                            title={!isFirstPriority ? `Locked: Strict Priority Queue. Priority #1 (${firstPatient?.name}) must be allocated first.` : undefined}
+                          >
+                            <Bed className="w-3.5 h-3.5" />
+                            <span>
+                              {isFirstPriority
+                                ? `🚑 Allocate ICU Bed (Priority #1)`
+                                : `🔒 Awaiting Priority #1 (${firstPatient?.name || 'Earlier Patient'})`}
+                            </span>
+                          </button>
+                        );
+                      })()
                     )}
 
                     {/* NURSE / ADMIN STEP-DOWN BED ALLOCATION BUTTON */}
                     {(isNurse || isAdmin) && patient.active_admission?.step_down_requested && (
-                      <button
-                        type="button"
-                        onClick={() => openStepDownModal(patient)}
-                        className="px-2.5 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-md shadow-teal-600/30 flex items-center gap-1.5 transition-all hover:scale-105 cursor-pointer"
-                      >
-                        <Bed className="w-3.5 h-3.5" />
-                        <span>
-                          🏥 Allocate Ward Bed {stepDownQueueIndex !== -1 && `(Priority #${stepDownQueueIndex + 1})`}
-                        </span>
-                      </button>
+                      (() => {
+                        const isFirstPriority = stepDownQueueIndex === 0;
+                        const firstPatient = stepDownQueue[0];
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => openStepDownModal(patient)}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                              isFirstPriority
+                                ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-md shadow-teal-600/30 hover:scale-105 cursor-pointer'
+                                : 'bg-slate-100 text-slate-500 border border-slate-300 hover:bg-slate-200 cursor-not-allowed opacity-85'
+                            }`}
+                            title={!isFirstPriority ? `Locked: Strict Priority Queue. Priority #1 (${firstPatient?.name}) must be allocated first.` : undefined}
+                          >
+                            <Bed className="w-3.5 h-3.5" />
+                            <span>
+                              {isFirstPriority
+                                ? `🏥 Allocate Ward Bed (Priority #1)`
+                                : `🔒 Awaiting Priority #1 (${firstPatient?.name || 'Earlier Patient'})`}
+                            </span>
+                          </button>
+                        );
+                      })()
                     )}
 
                     {/* NURSE / ADMIN QUICK VITAL ENTRY BUTTON */}

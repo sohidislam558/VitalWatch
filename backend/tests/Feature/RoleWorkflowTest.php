@@ -11,6 +11,13 @@ use Tests\TestCase;
 
 class RoleWorkflowTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // Clear lingering doctor_in_action alerts from dev seed data so the test run is fully deterministic
+        Alert::where('status', 'doctor_in_action')->update(['status' => 'resolved']);
+    }
+
     public function test_staff_can_register_as_nurse_and_doctor(): void
     {
         $nurseEmail = 'nurse.test.' . uniqid() . '@vitalwatch.hospital';

@@ -264,9 +264,28 @@ class AdmissionService
 
     /**
      * Complete an emergency ICU transfer by assigning an available ICU bed.
+     * Enforces strict FIFO priority queue: Priority #1 (earliest requested) patient must be allocated first.
      */
     public function completeIcuTransfer(Admission $admission, User $actor, string $newWard, string $newBed, string $ip): Admission
     {
+        // Enforce strict FIFO Priority Queue order: Prior request must be allocated first
+        $topPriorityRequest = Admission::where('icu_transfer_requested', true)
+            ->where('status', 'admitted')
+            ->orderByRaw('COALESCE(icu_transfer_requested_at, created_at) ASC')
+            ->orderBy('id', 'asc')
+            ->with('patient')
+            ->first();
+
+        if ($topPriorityRequest && $topPriorityRequest->id !== $admission->id) {
+            $priorityPatient = $topPriorityRequest->patient?->name ?? "Patient #{$topPriorityRequest->patient_id}";
+            $requestedTime = $topPriorityRequest->icu_transfer_requested_at?->format('H:i') ?? 'earlier';
+            throw ValidationException::withMessages([
+                'icu_queue' => [
+                    "Strict Priority Queue Violation: ICU bed allocation must follow the priority queue order strictly. Patient '{$priorityPatient}' requested ICU transfer earlier ({$requestedTime}) and holds Priority #1. Please allocate an ICU bed for Priority #1 patient first."
+                ],
+            ]);
+        }
+
         return DB::transaction(function () use ($admission, $actor, $newWard, $newBed, $ip) {
             // Verify new bed is available
             $bedOccupied = Admission::where('ward', $newWard)
@@ -403,6 +422,7 @@ class AdmissionService
 
     /**
      * Complete step-down transfer by allocating an available general ward bed.
+     * Enforces strict FIFO priority queue: Priority #1 (earliest requested) patient must be allocated first.
      */
     public function completeStepDown(Admission $admission, User $actor, string $newWard, string $newBed, string $ip): Admission
     {
@@ -410,6 +430,24 @@ class AdmissionService
         if (in_array($newWard, $icuWards, true)) {
             throw ValidationException::withMessages([
                 'ward' => ["Step-down target ward must be a general or step-down ward, not an intensive care unit."],
+            ]);
+        }
+
+        // Enforce strict FIFO Priority Queue order: Prior request must be allocated first
+        $topPriorityRequest = Admission::where('step_down_requested', true)
+            ->where('status', 'admitted')
+            ->orderByRaw('COALESCE(step_down_requested_at, created_at) ASC')
+            ->orderBy('id', 'asc')
+            ->with('patient')
+            ->first();
+
+        if ($topPriorityRequest && $topPriorityRequest->id !== $admission->id) {
+            $priorityPatient = $topPriorityRequest->patient?->name ?? "Patient #{$topPriorityRequest->patient_id}";
+            $requestedTime = $topPriorityRequest->step_down_requested_at?->format('H:i') ?? 'earlier';
+            throw ValidationException::withMessages([
+                'step_down_queue' => [
+                    "Strict Priority Queue Violation: Ward step-down bed allocation must follow the priority queue order strictly. Patient '{$priorityPatient}' requested step-down earlier ({$requestedTime}) and holds Priority #1. Please allocate a general bed for Priority #1 patient first."
+                ],
             ]);
         }
 

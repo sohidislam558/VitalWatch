@@ -458,4 +458,152 @@ class AdmissionTest extends TestCase
 
         $nurseSuccess->assertStatus(201);
     }
+
+    public function test_cannot_allocate_icu_bed_to_later_priority_patient_before_prior_patient(): void
+    {
+        $nurse = User::where('role', 'nurse')->first();
+        $doctor = User::where('role', 'doctor')->first();
+
+        // Clear any lingering requests from other tests
+        Admission::where('status', 'admitted')->update([
+            'icu_transfer_requested' => false,
+            'step_down_requested' => false,
+        ]);
+
+        // Patient 1 - Requested ICU earlier (20 minutes ago)
+        $patient1 = Patient::create([
+            'patient_code' => 'PAT-PRIO-01',
+            'name' => 'Priority One Patient',
+            'date_of_birth' => '1980-01-01',
+            'gender' => 'male',
+        ]);
+        $admission1 = Admission::create([
+            'patient_id' => $patient1->id,
+            'ward' => 'General Medical Ward',
+            'bed_number' => 'Bed 10',
+            'status' => 'admitted',
+            'admitted_at' => now()->subDay(),
+            'icu_transfer_requested' => true,
+            'icu_transfer_requested_at' => now()->subMinutes(20),
+            'icu_transfer_requested_by' => $doctor->id,
+            'target_icu_ward' => 'Cardiology ICU',
+        ]);
+
+        // Patient 2 - Requested ICU later (5 minutes ago)
+        $patient2 = Patient::create([
+            'patient_code' => 'PAT-PRIO-02',
+            'name' => 'Priority Two Patient',
+            'date_of_birth' => '1985-02-02',
+            'gender' => 'female',
+        ]);
+        $admission2 = Admission::create([
+            'patient_id' => $patient2->id,
+            'ward' => 'General Medical Ward',
+            'bed_number' => 'Bed 11',
+            'status' => 'admitted',
+            'admitted_at' => now()->subDay(),
+            'icu_transfer_requested' => true,
+            'icu_transfer_requested_at' => now()->subMinutes(5),
+            'icu_transfer_requested_by' => $doctor->id,
+            'target_icu_ward' => 'Cardiology ICU',
+        ]);
+
+        // 1. Nurse attempts to allocate an ICU bed for Patient 2 (mistaken allocation) -> Must be rejected with 422
+        $responseMistake = $this->actingAs($nurse, 'sanctum')->postJson("/api/admissions/{$admission2->id}/complete-icu-transfer", [
+            'ward' => 'Cardiology ICU',
+            'bed_number' => 'Bed 108',
+        ]);
+
+        $responseMistake->assertStatus(422);
+        $this->assertStringContainsString('Strict Priority Queue Violation', $responseMistake->json('message'));
+        $this->assertStringContainsString('Priority One Patient', $responseMistake->json('message'));
+
+        // 2. Nurse allocates ICU bed for Patient 1 (Priority #1) -> Succeeds with 200
+        $responseSuccess1 = $this->actingAs($nurse, 'sanctum')->postJson("/api/admissions/{$admission1->id}/complete-icu-transfer", [
+            'ward' => 'Cardiology ICU',
+            'bed_number' => 'Bed 108',
+        ]);
+        $responseSuccess1->assertStatus(200);
+
+        // 3. Patient 2 is now Priority #1 in the queue -> Allocation for Patient 2 now succeeds with 200!
+        $responseSuccess2 = $this->actingAs($nurse, 'sanctum')->postJson("/api/admissions/{$admission2->id}/complete-icu-transfer", [
+            'ward' => 'Cardiology ICU',
+            'bed_number' => 'Bed 109',
+        ]);
+        $responseSuccess2->assertStatus(200);
+    }
+
+    public function test_cannot_allocate_step_down_bed_to_later_priority_patient_before_prior_patient(): void
+    {
+        $nurse = User::where('role', 'nurse')->first();
+        $doctor = User::where('role', 'doctor')->first();
+
+        // Clear any lingering requests from other tests
+        Admission::where('status', 'admitted')->update([
+            'icu_transfer_requested' => false,
+            'step_down_requested' => false,
+        ]);
+
+        // Patient 1 - Requested Step-Down earlier (30 minutes ago)
+        $patient1 = Patient::create([
+            'patient_code' => 'PAT-STEP-01',
+            'name' => 'First StepDown Patient',
+            'date_of_birth' => '1981-01-01',
+            'gender' => 'male',
+        ]);
+        $admission1 = Admission::create([
+            'patient_id' => $patient1->id,
+            'ward' => 'Cardiology ICU',
+            'bed_number' => 'Bed 101',
+            'status' => 'admitted',
+            'admitted_at' => now()->subDays(2),
+            'step_down_requested' => true,
+            'step_down_requested_at' => now()->subMinutes(30),
+            'step_down_requested_by' => $doctor->id,
+            'target_step_down_ward' => 'General Medical Ward',
+        ]);
+
+        // Patient 2 - Requested Step-Down later (10 minutes ago)
+        $patient2 = Patient::create([
+            'patient_code' => 'PAT-STEP-02',
+            'name' => 'Second StepDown Patient',
+            'date_of_birth' => '1986-02-02',
+            'gender' => 'female',
+        ]);
+        $admission2 = Admission::create([
+            'patient_id' => $patient2->id,
+            'ward' => 'Cardiology ICU',
+            'bed_number' => 'Bed 102',
+            'status' => 'admitted',
+            'admitted_at' => now()->subDays(2),
+            'step_down_requested' => true,
+            'step_down_requested_at' => now()->subMinutes(10),
+            'step_down_requested_by' => $doctor->id,
+            'target_step_down_ward' => 'General Medical Ward',
+        ]);
+
+        // 1. Nurse attempts to allocate a general ward bed for Patient 2 -> Must fail with 422
+        $responseMistake = $this->actingAs($nurse, 'sanctum')->postJson("/api/admissions/{$admission2->id}/complete-step-down", [
+            'ward' => 'General Medical Ward',
+            'bed_number' => 'Bed 12',
+        ]);
+
+        $responseMistake->assertStatus(422);
+        $this->assertStringContainsString('Strict Priority Queue Violation', $responseMistake->json('message'));
+        $this->assertStringContainsString('First StepDown Patient', $responseMistake->json('message'));
+
+        // 2. Nurse allocates for Patient 1 -> Succeeds
+        $responseSuccess1 = $this->actingAs($nurse, 'sanctum')->postJson("/api/admissions/{$admission1->id}/complete-step-down", [
+            'ward' => 'General Medical Ward',
+            'bed_number' => 'Bed 12',
+        ]);
+        $responseSuccess1->assertStatus(200);
+
+        // 3. Nurse now allocates for Patient 2 -> Succeeds
+        $responseSuccess2 = $this->actingAs($nurse, 'sanctum')->postJson("/api/admissions/{$admission2->id}/complete-step-down", [
+            'ward' => 'General Medical Ward',
+            'bed_number' => 'Bed 13',
+        ]);
+        $responseSuccess2->assertStatus(200);
+    }
 }
