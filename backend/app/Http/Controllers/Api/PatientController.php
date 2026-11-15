@@ -24,7 +24,7 @@ class PatientController extends Controller
         $this->authorize('viewAny', Patient::class);
 
         $patients = $this->patientService->list(
-            $request->only(['search', 'ward', 'status']),
+            $request->only(['search', 'ward', 'status', 'admitted_date', 'date']),
             (int) $request->input('per_page', 10)
         );
 

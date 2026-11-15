@@ -139,12 +139,27 @@ export default function AddVitals() {
         </div>
 
         {patientData && patientData.active_admission ? (
-          <VitalEntryForm
-            key={patientData.id}
-            patient={patientData}
-            onSubmit={handleRecordSubmit}
-            loading={saveLoading}
-          />
+          patientData.active_admission.icu_transferred && !patientData.active_admission.icu_assessment_done ? (
+            <div className="p-5 bg-amber-50 border border-amber-300 rounded-xl text-amber-900 text-xs space-y-2.5">
+              <div className="flex items-center gap-2 font-bold text-amber-900 text-sm">
+                <span className="text-base">🔒</span>
+                <span>Awaiting Attending Physician ICU Assessment</span>
+              </div>
+              <p className="leading-relaxed">
+                Patient <strong>{patientData.name}</strong> was transferred from a general ward to the ICU ({patientData.active_admission.ward}, Bed {patientData.active_admission.bed_number}) and is awaiting bedside clinical assessment.
+              </p>
+              <p className="text-[11px] text-amber-800 font-semibold bg-amber-100/70 p-2.5 rounded-lg border border-amber-200">
+                Notice: Routine nursing vital entry is temporarily locked until the attending physician in action completes the bedside assessment and marks assessment done.
+              </p>
+            </div>
+          ) : (
+            <VitalEntryForm
+              key={patientData.id}
+              patient={patientData}
+              onSubmit={handleRecordSubmit}
+              loading={saveLoading}
+            />
+          )
         ) : (
           <div className="p-4 bg-amber-50 text-amber-800 text-xs rounded-md">
             The selected patient does not have an active ward admission. Please select an admitted patient.

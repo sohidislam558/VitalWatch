@@ -15,16 +15,18 @@ import SearchInput from '../../components/common/SearchInput';
 import WardFilter from '../../components/dashboard/WardFilter';
 import Pagination from '../../components/common/Pagination';
 import Button from '../../components/common/Button';
-import { UserPlus, RefreshCw } from 'lucide-react';
+import HospitalGovernanceNav from '../../components/admin/HospitalGovernanceNav';
+import { UserPlus, Calendar } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-export default function Patients() {
+export default function Patients({ embedded = false }) {
   const { user } = useAuth();
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [ward, setWard] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [admittedDate, setAdmittedDate] = useState('');
 
   // Pagination hook
   const { page, perPage, totalPages, totalItems, setPage, updatePaginationData } = usePagination(1, 10);
@@ -44,6 +46,7 @@ export default function Patients() {
         search: search || undefined,
         ward: ward || undefined,
         status: statusFilter || undefined,
+        admitted_date: admittedDate || undefined,
         page,
         per_page: perPage,
       });
@@ -54,7 +57,7 @@ export default function Patients() {
     } finally {
       setLoading(false);
     }
-  }, [search, ward, statusFilter, page, perPage]);
+  }, [search, ward, statusFilter, admittedDate, page, perPage]);
 
   useEffect(() => {
     fetchPatients();
@@ -90,8 +93,11 @@ export default function Patients() {
     }
   };
 
-  return (
-    <PageContainer>
+  const content = (
+    <div className="w-full">
+      {!embedded && user?.role === 'admin' && (
+        <HospitalGovernanceNav activeSection="patients" />
+      )}
       <PageHeader
         title="Hospital Patient Directory"
         subtitle="Master patient index, ward admissions, and monitoring profiles"
@@ -137,6 +143,35 @@ export default function Patients() {
             <option value="admitted">Currently Admitted</option>
             <option value="discharged">Discharged</option>
           </select>
+
+          {/* Admitted Date Calendar Filter */}
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-md px-2.5 py-1.5">
+            <Calendar className="w-3.5 h-3.5 text-slate-500" />
+            <span className="text-[11px] font-semibold text-slate-600 whitespace-nowrap">Admitted:</span>
+            <input
+              type="date"
+              value={admittedDate}
+              onChange={(e) => {
+                setAdmittedDate(e.target.value);
+                setPage(1);
+              }}
+              className="text-xs bg-transparent text-slate-700 outline-none cursor-pointer"
+              title="Filter by admission date"
+            />
+            {admittedDate && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAdmittedDate('');
+                  setPage(1);
+                }}
+                className="text-xs text-rose-600 hover:text-rose-800 font-bold ml-1 cursor-pointer"
+                title="Clear date filter"
+              >
+                ✕
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -182,7 +217,13 @@ export default function Patients() {
           />
         )}
       </Modal>
-    </PageContainer>
+    </div>
   );
+
+  if (embedded) {
+    return content;
+  }
+
+  return <PageContainer>{content}</PageContainer>;
 }
 

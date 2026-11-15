@@ -11,7 +11,6 @@ import Button from '../../components/common/Button';
 import { formatDoctorName } from '../../utils/formatUser';
 import {
   Stethoscope,
-  Mail,
   CheckCircle2,
   HeartPulse,
   AlertTriangle,
@@ -149,7 +148,7 @@ export default function DoctorPortal() {
               Attending Physician Situation Telemetry
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Welcome, <span className="font-semibold text-slate-700">{formatDoctorName(user?.name)}</span> (MD) • Early Warning Response & Bedside Action
+              Welcome, <span className="font-semibold text-slate-700">{formatDoctorName(user?.name)}</span> (MO) • Early Warning Response & Bedside Action
             </p>
           </div>
         </div>
@@ -247,38 +246,6 @@ export default function DoctorPortal() {
         </div>
       )}
 
-      {/* Gmail SMTP Real-time Alert Notification Banner */}
-      <div className="p-4 bg-gradient-to-r from-cyan-900 to-slate-900 text-white rounded-2xl shadow-sm mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-xl bg-cyan-500/20 border border-cyan-400/30 flex items-center justify-center text-cyan-300 flex-shrink-0">
-            <Mail className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-sm text-white">Gmail SMTP Emergency Dispatch Enabled</span>
-              <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                ACTIVE
-              </span>
-            </div>
-            <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
-              When vital signs cross critical early warning thresholds, automated email alerts are dispatched immediately to on-duty physicians.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 text-xs text-slate-300 bg-white/10 px-3 py-2 rounded-xl backdrop-blur-xs self-stretch sm:self-auto justify-between sm:justify-start">
-          <span>Patients Needing Attention:</span>
-          <span
-            className={`font-mono font-bold px-2 py-0.5 rounded text-xs ${
-              emergencyPatientCount > 0
-                ? 'bg-red-500 text-white animate-pulse'
-                : 'bg-emerald-500/30 text-emerald-300'
-            }`}
-          >
-            {emergencyPatientCount}
-          </span>
-        </div>
-      </div>
 
       {/* The Situation Monitor Header */}
       <div className="mb-4">

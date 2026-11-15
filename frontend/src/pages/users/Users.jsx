@@ -11,9 +11,10 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
 import { UserPlus, Edit, ShieldCheck, RefreshCw } from 'lucide-react';
 import { formatDateTime } from '../../utils/formatDate';
+import HospitalGovernanceNav from '../../components/admin/HospitalGovernanceNav';
 import toast from 'react-hot-toast';
 
-export default function Users() {
+export default function Users({ embedded = false }) {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -54,8 +55,11 @@ export default function Users() {
     }
   };
 
-  return (
-    <PageContainer>
+  const content = (
+    <div className="w-full">
+      {!embedded && currentUser?.role === 'admin' && (
+        <HospitalGovernanceNav activeSection="users" />
+      )}
       <PageHeader
         title="Hospital Staff Accounts & Roles"
         subtitle="Manage doctors, nurses, and hospital system administrators"
@@ -155,7 +159,13 @@ export default function Users() {
           </table>
         </div>
       )}
-    </PageContainer>
+    </div>
   );
+
+  if (embedded) {
+    return content;
+  }
+
+  return <PageContainer>{content}</PageContainer>;
 }
 

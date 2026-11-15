@@ -46,10 +46,10 @@ export default function Sidebar({ onClose }) {
     // Admin (Simplified Governance & Monitoring Feed)
     links = [
       { to: '/dashboard', label: 'Admin Activity Feed', icon: LayoutDashboard },
-      { to: '/patients', label: 'Patient Directory', icon: Users },
-      { to: '/reports', label: 'Clinical Reports', icon: FileText },
-      { to: '/users', label: 'Staff Accounts', icon: UserCheck },
-      { to: '/settings/rules', label: 'Alert Threshold Rules', icon: Sliders },
+      { to: '/dashboard?section=patients', label: 'Patient Directory', icon: Users },
+      { to: '/dashboard?section=reports', label: 'Clinical Reports', icon: FileText },
+      { to: '/dashboard?section=users', label: 'Staff Accounts', icon: UserCheck },
+      { to: '/dashboard?section=rules', label: 'Alert Threshold Rules', icon: Sliders },
     ];
   }
 

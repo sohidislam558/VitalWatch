@@ -10,9 +10,12 @@ import Button from '../../components/common/Button';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
 import { FileText, Download, Printer } from 'lucide-react';
+import { useAuth } from '../../hooks/useAuth';
+import HospitalGovernanceNav from '../../components/admin/HospitalGovernanceNav';
 import toast from 'react-hot-toast';
 
-export default function Reports() {
+export default function Reports({ embedded = false }) {
+  const { user } = useAuth();
   const [patients, setPatients] = useState([]);
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -76,8 +79,11 @@ export default function Reports() {
     }
   };
 
-  return (
-    <PageContainer>
+  const content = (
+    <div className="w-full">
+      {!embedded && user?.role === 'admin' && (
+        <HospitalGovernanceNav activeSection="reports" />
+      )}
       <div className="no-print">
         <PageHeader
           title="Clinical Patient Monitoring Reports"
@@ -142,7 +148,13 @@ export default function Reports() {
           description="Choose a patient from the dropdown above to preview and export monitoring data."
         />
       )}
-    </PageContainer>
+    </div>
   );
+
+  if (embedded) {
+    return content;
+  }
+
+  return <PageContainer>{content}</PageContainer>;
 }
 

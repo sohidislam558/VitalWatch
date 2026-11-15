@@ -71,6 +71,15 @@ class VitalService
                 ]);
             }
 
+            // Enforce ICU assessment completion policy:
+            // Whenever a patient is transferred from a general ward to the ICU,
+            // nurses cannot enter new vitals until the attending physician marks bedside assessment done.
+            if (($actor->role === 'nurse' || (method_exists($actor, 'isNurse') && $actor->isNurse())) && $admission->icu_transferred && !$admission->icu_assessment_done) {
+                throw ValidationException::withMessages([
+                    'patient_id' => ["Patient '{$patient->name}' was transferred to the ICU and is awaiting attending physician clinical assessment. Vitals cannot be entered by nursing staff until the doctor marks assessment done."],
+                ]);
+            }
+
             $vitalRecord = VitalRecord::create([
                 'patient_id' => $patient->id,
                 'admission_id' => $admission->id,
@@ -168,8 +177,20 @@ class VitalService
                 entityId: $vitalRecord->id,
                 details: [
                     'patient_id' => $patient->id,
+                    'patient_name' => $patient->name,
                     'patient_code' => $patient->patient_code,
+                    'ward' => $admission->ward,
+                    'bed_number' => $admission->bed_number,
+                    'heart_rate' => $vitalRecord->heart_rate,
+                    'systolic_bp' => $vitalRecord->systolic_bp,
+                    'diastolic_bp' => $vitalRecord->diastolic_bp,
+                    'spo2' => $vitalRecord->spo2,
+                    'temperature' => $vitalRecord->temperature,
+                    'respiratory_rate' => $vitalRecord->respiratory_rate,
+                    'clinical_notes' => $vitalRecord->notes,
+                    'notes' => $vitalRecord->notes,
                     'alerts_generated' => $alerts->count(),
+                    'measured_at' => $vitalRecord->measured_at?->toIso8601String(),
                 ],
                 user: $actor,
                 ipAddress: $ip

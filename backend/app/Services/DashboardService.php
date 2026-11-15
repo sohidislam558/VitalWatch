@@ -271,51 +271,121 @@ class DashboardService
             $query->where('created_at', '<=', $endDate . ' 23:59:59');
         }
 
-        return $query->take($limit)
-            ->get()
-            ->map(function ($log) {
-                $role = $log->user?->role ?? 'system';
-                $userName = $log->user?->name ?? 'System';
-                $details = is_array($log->details) ? $log->details : [];
+        $logs = $query->take($limit)->get();
 
-                $ruleName = $details['rule'] ?? 'Threshold breached';
-                $patientName = $details['name'] ?? 'Patient';
-                $patientCode = $details['patient_code'] ?? '';
-                $ward = $details['ward'] ?? 'Ward';
-                $bed = $details['bed_number'] ?? '';
+        // Eagerly hydrate VitalRecord details for any RECORD_VITALS logs
+        $vitalIds = $logs->where('action', 'RECORD_VITALS')->pluck('entity_id')->filter()->unique();
+        $vitalsMap = $vitalIds->isNotEmpty()
+            ? VitalRecord::with(['patient', 'admission'])->whereIn('id', $vitalIds)->get()->keyBy('id')
+            : collect();
 
-                $nurseTitle = User::formatNurseName($userName);
-                $doctorTitle = User::formatDoctorName($userName);
+        // Eagerly hydrate Alert details
+        $alertIds = $logs->filter(fn($l) => str_starts_with($l->action, 'ALERT_') || $l->action === 'DOCTOR_IN_ACTION')->pluck('entity_id')->filter()->unique();
+        $alertsMap = $alertIds->isNotEmpty()
+            ? Alert::with(['patient.activeAdmission', 'alertRule'])->whereIn('id', $alertIds)->get()->keyBy('id')
+            : collect();
 
-                $summary = match ($log->action) {
-                    'RECORD_VITALS' => "{$nurseTitle} entered bedside vital signs (Patient ID: #{$log->entity_id})",
-                    'DOCTOR_IN_ACTION' => "{$doctorTitle} responded to emergency alarm: 'Doctor in Action' (Alert #{$log->entity_id})",
-                    'ALERT_ACKNOWLEDGED' => "{$userName} acknowledged early warning alert #{$log->entity_id}",
-                    'ALERT_RESOLVED' => "{$doctorTitle} formally resolved alert #{$log->entity_id}",
-                    'ALERT_AUTO_RESOLVED_BY_NEW_VITALS' => "System: Alert #{$log->entity_id} auto-resolved following normal vitals recorded by {$nurseTitle}",
-                    'ALERT_GENERATED' => "Early Warning Alert triggered: {$ruleName}",
-                    'PATIENT_REGISTERED' => "Staff {$userName} registered patient '{$patientName}' ({$patientCode})",
-                    'PATIENT_ADMITTED' => "Patient admitted to {$ward} (Bed {$bed}) by {$userName}",
-                    'PATIENT_DISCHARGED' => "Patient discharged from {$ward} by {$userName}",
-                    'EMERGENCY_ICU_TRANSFER_REQUESTED' => "{$doctorTitle} requested emergency ICU transfer for {$patientName} ({$details['current_ward']}, Bed {$details['current_bed']})",
-                    'PATIENT_TRANSFERRED_TO_ICU' => "{$userName} completed ICU transfer to {$details['to_ward']} ({$details['to_bed']})",
-                    'ICU_TRANSFER_REQUEST_CANCELLED' => "{$userName} cancelled ICU transfer request",
-                    'STEP_DOWN_REQUESTED' => "{$doctorTitle} requested ward step-down for {$patientName} ({$details['current_ward']}, Bed {$details['current_bed']})",
-                    'PATIENT_STEPPED_DOWN' => "{$userName} completed ward step-down to {$details['to_ward']} ({$details['to_bed']})",
-                    'STEP_DOWN_CANCELLED' => "{$userName} cancelled ward step-down request",
-                    'LOGIN_SUCCESS' => "{$userName} signed in to hospital portal",
-                    default => "{$userName} performed {$log->action}",
-                };
+        // Eagerly hydrate Admission details
+        $admissionIds = $logs->filter(fn($l) => str_contains($l->action, 'PATIENT_') || str_contains($l->action, 'ICU') || str_contains($l->action, 'STEP_DOWN'))->pluck('entity_id')->filter()->unique();
+        $admissionsMap = $admissionIds->isNotEmpty()
+            ? Admission::with('patient')->whereIn('id', $admissionIds)->get()->keyBy('id')
+            : collect();
 
-                return [
-                    'id' => $log->id,
-                    'action' => $log->action,
-                    'role' => $role,
-                    'user_name' => $userName,
-                    'summary' => $summary,
-                    'details' => $details,
-                    'created_at' => $log->created_at,
-                ];
-            });
+        return $logs->map(function ($log) use ($vitalsMap, $alertsMap, $admissionsMap) {
+            $role = $log->user?->role ?? 'system';
+            $userName = $log->user?->name ?? 'System';
+            $details = is_array($log->details) ? $log->details : [];
+
+            // Hydrate missing vital details
+            if ($log->action === 'RECORD_VITALS' && $vitalsMap->has($log->entity_id)) {
+                $vital = $vitalsMap->get($log->entity_id);
+                if ($vital) {
+                    $details['patient_name'] = $details['patient_name'] ?? $vital->patient?->name;
+                    $details['patient_code'] = $details['patient_code'] ?? $vital->patient?->patient_code;
+                    $details['ward'] = $details['ward'] ?? $vital->admission?->ward;
+                    $details['bed_number'] = $details['bed_number'] ?? $vital->admission?->bed_number;
+                    $details['heart_rate'] = $details['heart_rate'] ?? $vital->heart_rate;
+                    $details['systolic_bp'] = $details['systolic_bp'] ?? $vital->systolic_bp;
+                    $details['diastolic_bp'] = $details['diastolic_bp'] ?? $vital->diastolic_bp;
+                    $details['spo2'] = $details['spo2'] ?? $vital->spo2;
+                    $details['temperature'] = $details['temperature'] ?? $vital->temperature;
+                    $details['respiratory_rate'] = $details['respiratory_rate'] ?? $vital->respiratory_rate;
+                    $details['clinical_notes'] = $details['clinical_notes'] ?? $vital->notes;
+                    $details['notes'] = $details['notes'] ?? $vital->notes;
+                    $details['measured_at'] = $details['measured_at'] ?? $vital->measured_at?->toIso8601String();
+                }
+            }
+
+            // Hydrate missing alert details
+            if ((str_starts_with($log->action, 'ALERT_') || $log->action === 'DOCTOR_IN_ACTION') && $alertsMap->has($log->entity_id)) {
+                $alert = $alertsMap->get($log->entity_id);
+                if ($alert) {
+                    $details['patient_name'] = $details['patient_name'] ?? $alert->patient?->name;
+                    $details['patient_code'] = $details['patient_code'] ?? $alert->patient?->patient_code;
+                    $details['ward'] = $details['ward'] ?? $alert->patient?->activeAdmission?->ward;
+                    $details['bed_number'] = $details['bed_number'] ?? $alert->patient?->activeAdmission?->bed_number;
+                    $details['message'] = $details['message'] ?? $alert->message;
+                    $details['rule'] = $details['rule'] ?? $alert->alertRule?->name;
+                    $details['notes'] = $details['notes'] ?? $details['note'] ?? null;
+                }
+            }
+
+            // Hydrate missing admission details
+            if ($admissionsMap->has($log->entity_id)) {
+                $admission = $admissionsMap->get($log->entity_id);
+                if ($admission) {
+                    $details['patient_name'] = $details['patient_name'] ?? $admission->patient?->name;
+                    $details['patient_code'] = $details['patient_code'] ?? $admission->patient?->patient_code;
+                    $details['ward'] = $details['ward'] ?? $admission->ward;
+                    $details['bed_number'] = $details['bed_number'] ?? $admission->bed_number;
+                }
+            }
+
+            $ruleName = $details['rule'] ?? 'Threshold breached';
+            $patientName = $details['patient_name'] ?? $details['name'] ?? null;
+            $patientCode = $details['patient_code'] ?? '';
+            $ward = $details['ward'] ?? 'Ward';
+            $bed = $details['bed_number'] ?? '';
+            $currentWard = $details['current_ward'] ?? $ward;
+            $currentBed = $details['current_bed'] ?? $bed;
+            $toWard = $details['to_ward'] ?? 'Ward';
+            $toBed = $details['to_bed'] ?? 'Bed';
+
+            $patientLabel = $patientName ? "'{$patientName}'" : ($patientCode ? "Patient ({$patientCode})" : "Patient");
+            $bedLabel = $bed ? " (Bed {$bed})" : "";
+
+            $nurseTitle = User::formatNurseName($userName);
+            $doctorTitle = User::formatDoctorName($userName);
+
+            $summary = match ($log->action) {
+                'RECORD_VITALS' => "{$nurseTitle} entered bedside vital signs for {$patientLabel}{$bedLabel}",
+                'DOCTOR_IN_ACTION' => "{$doctorTitle} responded to emergency alarm: 'Doctor in Action' for {$patientLabel}",
+                'ALERT_ACKNOWLEDGED' => "{$userName} acknowledged early warning alert #{$log->entity_id} for {$patientLabel}",
+                'ALERT_RESOLVED' => "{$doctorTitle} formally resolved alert #{$log->entity_id} for {$patientLabel}",
+                'ALERT_AUTO_RESOLVED_BY_NEW_VITALS' => "System: Alert #{$log->entity_id} auto-resolved following normal vitals recorded by {$nurseTitle} for {$patientLabel}",
+                'ALERT_GENERATED' => "Early Warning Alert triggered for {$patientLabel}: {$ruleName}",
+                'PATIENT_REGISTERED' => "Staff {$userName} registered patient '{$patientName}' ({$patientCode})",
+                'PATIENT_ADMITTED' => "Patient {$patientLabel} admitted to {$ward} (Bed {$bed}) by {$userName}",
+                'PATIENT_DISCHARGED' => "Patient {$patientLabel} discharged from {$ward} by {$userName}",
+                'EMERGENCY_ICU_TRANSFER_REQUESTED' => "{$doctorTitle} requested emergency ICU transfer for {$patientLabel} ({$currentWard}, Bed {$currentBed})",
+                'PATIENT_TRANSFERRED_TO_ICU' => "{$userName} completed ICU transfer for {$patientLabel} to {$toWard} ({$toBed})",
+                'ICU_TRANSFER_REQUEST_CANCELLED' => "{$userName} cancelled ICU transfer request for {$patientLabel}",
+                'STEP_DOWN_REQUESTED' => "{$doctorTitle} requested ward step-down for {$patientLabel} ({$currentWard}, Bed {$currentBed})",
+                'PATIENT_STEPPED_DOWN' => "{$userName} completed ward step-down for {$patientLabel} to {$toWard} ({$toBed})",
+                'STEP_DOWN_CANCELLED' => "{$userName} cancelled ward step-down request for {$patientLabel}",
+                'LOGIN_SUCCESS' => "{$userName} signed in to hospital portal",
+                default => "{$userName} performed {$log->action}",
+            };
+
+            return [
+                'id' => $log->id,
+                'action' => $log->action,
+                'role' => $role,
+                'user_name' => $userName,
+                'summary' => $summary,
+                'details' => $details,
+                'created_at' => $log->created_at,
+            ];
+        });
     }
 }

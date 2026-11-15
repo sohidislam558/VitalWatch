@@ -36,3 +36,4 @@ export function formatStaffName(name, role) {
   if (role === 'nurse') return formatNurseName(name);
   return cleanPersonName(name);
 }
+

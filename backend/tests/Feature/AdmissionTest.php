@@ -374,4 +374,88 @@ class AdmissionTest extends TestCase
         $this->assertNotFalse($index2);
         $this->assertLessThan($index2, $index1, 'First requested ICU patient must hold earlier queue priority than second requested patient.');
     }
+
+    public function test_nurse_cannot_record_vitals_for_icu_transferred_patient_until_doctor_marks_assessment_done(): void
+    {
+        $nurse = User::where('role', 'nurse')->first();
+        $doctor = User::where('role', 'doctor')->first();
+
+        $patient = Patient::create([
+            'patient_code' => 'PAT-ICU-LOCK-01',
+            'name' => 'Lock Assessment Patient',
+            'date_of_birth' => '1975-05-15',
+            'gender' => 'male',
+        ]);
+
+        $admission = Admission::create([
+            'patient_id' => $patient->id,
+            'ward' => 'Cardiology ICU',
+            'bed_number' => 'Bed 105',
+            'status' => 'admitted',
+            'admitted_at' => now()->subDay(),
+            'icu_transferred' => true,
+            'icu_transferred_at' => now()->subHours(1),
+            'icu_assessment_done' => false,
+        ]);
+
+        // 1. Nurse attempts to input vitals -> must fail with 422 validation error
+        $nurseResponse = $this->actingAs($nurse, 'sanctum')->postJson('/api/vitals', [
+            'patient_id' => $patient->id,
+            'admission_id' => $admission->id,
+            'heart_rate' => 80,
+            'systolic_bp' => 120,
+            'diastolic_bp' => 80,
+            'spo2' => 98,
+            'temperature' => 37.0,
+            'respiratory_rate' => 16,
+        ]);
+
+        $nurseResponse->assertStatus(422);
+        $this->assertStringContainsString('awaiting attending physician', $nurseResponse->json('message'));
+
+        // 2. Doctor creates an emergency alert / marks assessment done
+        $rule = \App\Models\AlertRule::first();
+        $vitalRecord = \App\Models\VitalRecord::create([
+            'patient_id' => $patient->id,
+            'admission_id' => $admission->id,
+            'recorded_by' => $nurse->id,
+            'heart_rate' => 130,
+            'systolic_bp' => 120,
+            'diastolic_bp' => 80,
+            'spo2' => 98,
+            'temperature' => 37.0,
+            'respiratory_rate' => 16,
+            'measured_at' => now()->subMinutes(30),
+        ]);
+
+        $alert = \App\Models\Alert::create([
+            'patient_id' => $patient->id,
+            'vital_record_id' => $vitalRecord->id,
+            'alert_rule_id' => $rule->id,
+            'priority' => 'urgent',
+            'message' => 'Tachycardia alert',
+            'status' => 'doctor_in_action',
+        ]);
+
+        $docResponse = $this->actingAs($doctor, 'sanctum')->patchJson("/api/alerts/{$alert->id}/assessment-done");
+        $docResponse->assertStatus(200);
+
+        // Verification: admission now has icu_assessment_done = true
+        $admission->refresh();
+        $this->assertTrue($admission->icu_assessment_done);
+
+        // 3. Nurse now attempts to input vitals -> must succeed with 201
+        $nurseSuccess = $this->actingAs($nurse, 'sanctum')->postJson('/api/vitals', [
+            'patient_id' => $patient->id,
+            'admission_id' => $admission->id,
+            'heart_rate' => 82,
+            'systolic_bp' => 122,
+            'diastolic_bp' => 81,
+            'spo2' => 99,
+            'temperature' => 36.8,
+            'respiratory_rate' => 16,
+        ]);
+
+        $nurseSuccess->assertStatus(201);
+    }
 }

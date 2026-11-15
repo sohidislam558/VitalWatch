@@ -99,6 +99,11 @@ class AlertService
                     'value' => $val,
                     'threshold' => $threshold,
                     'priority' => $rule->priority,
+                    'message' => $alert->message,
+                    'patient_id' => $vitalRecord->patient_id,
+                    'patient_name' => $vitalRecord->patient?->name,
+                    'ward' => $vitalRecord->admission?->ward,
+                    'bed_number' => $vitalRecord->admission?->bed_number,
                 ],
                 user: $actor
             );
@@ -177,7 +182,13 @@ class AlertService
                 'doctor_id' => $user->id,
                 'doctor_name' => $user->name,
                 'patient_id' => $alert->patient_id,
+                'patient_name' => $alert->patient?->name,
+                'ward' => $alert->patient?->activeAdmission?->ward,
+                'bed_number' => $alert->patient?->activeAdmission?->bed_number,
                 'note' => $actionNote,
+                'notes' => $actionNote,
+                'message' => $alert->message,
+                'rule' => $alert->alertRule?->name,
                 'patient_alerts_count' => $patientAlerts->count(),
             ],
             user: $user,
@@ -206,7 +217,15 @@ class AlertService
             action: 'ALERT_ACKNOWLEDGED',
             entityType: Alert::class,
             entityId: $alert->id,
-            details: ['note' => $note],
+            details: [
+                'note' => $note,
+                'notes' => $note,
+                'patient_id' => $alert->patient_id,
+                'patient_name' => $alert->patient?->name,
+                'ward' => $alert->patient?->activeAdmission?->ward,
+                'bed_number' => $alert->patient?->activeAdmission?->bed_number,
+                'message' => $alert->message,
+            ],
             user: $user,
             ipAddress: $ip
         );
@@ -240,13 +259,29 @@ class AlertService
 
         $alert->update(['status' => 'resolved']);
 
+        // If the patient is under ICU observation following an ICU transfer,
+        // mark the ICU assessment completed by the physician!
+        $activeAdmission = $alert->patient?->activeAdmission;
+        if ($activeAdmission && $activeAdmission->icu_transferred) {
+            $activeAdmission->update([
+                'icu_assessment_done' => true,
+                'icu_assessment_done_at' => now(),
+            ]);
+        }
+
         $this->auditService->log(
             action: 'ALERT_RESOLVED',
             entityType: Alert::class,
             entityId: $alert->id,
             details: [
                 'note' => $actionNote,
+                'notes' => $actionNote,
                 'patient_id' => $alert->patient_id,
+                'patient_name' => $alert->patient?->name,
+                'ward' => $activeAdmission?->ward,
+                'bed_number' => $activeAdmission?->bed_number,
+                'rule' => $alert->alertRule?->name,
+                'message' => $alert->message,
                 'resolved_alerts_count' => $patientAlerts->count(),
             ],
             user: $user,

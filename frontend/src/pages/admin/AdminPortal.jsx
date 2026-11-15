@@ -1,11 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { dashboardService } from '../../services/settingsService';
 import { useAuth } from '../../hooks/useAuth';
 import PageContainer from '../../components/layout/PageContainer';
 import SituationMonitor from '../../components/dashboard/SituationMonitor';
 import DateRangePicker from '../../components/common/DateRangePicker';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
+import HospitalGovernanceNav from '../../components/admin/HospitalGovernanceNav';
+import UsersPage from '../users/Users';
+import AlertRulesPage from '../settings/AlertRules';
+import PatientsPage from '../patients/Patients';
+import ReportsPage from '../reports/Reports';
 import { cleanPersonName, formatDoctorName, formatNurseName } from '../../utils/formatUser';
 import { onTelemetryUpdate } from '../../utils/realtime';
 import {
@@ -37,6 +42,24 @@ import toast from 'react-hot-toast';
 
 export default function AdminPortal() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const currentSection = searchParams.get('section') || 'overview';
+  const [activeGovSection, setActiveGovSection] = useState(currentSection);
+
+  useEffect(() => {
+    const sec = searchParams.get('section') || 'overview';
+    setActiveGovSection(sec);
+  }, [searchParams]);
+
+  const handleSelectGovSection = (sec) => {
+    setActiveGovSection(sec);
+    if (sec === 'overview') {
+      setSearchParams({});
+    } else {
+      setSearchParams({ section: sec });
+    }
+  };
+
   const [patients, setPatients] = useState([]);
   const [summary, setSummary] = useState(null);
   const [activities, setActivities] = useState([]);
@@ -296,16 +319,16 @@ export default function AdminPortal() {
 
   const getActivityTarget = (item) => {
     const details = item.details || {};
-    if (details.name) {
-      return `${details.name}${details.bed_number ? ` (${details.bed_number})` : ''}`;
+    const patient = details.patient_name || details.name;
+    const bed = details.bed_number || details.current_bed || details.to_bed;
+    if (patient) {
+      return `${patient}${bed ? ` (${bed})` : ''}`;
     }
-    if (details.patient_name) {
-      return `${details.patient_name}${details.current_bed ? ` (${details.current_bed})` : ''}`;
+    if (details.ward || details.to_ward || details.current_ward) {
+      const w = details.ward || details.to_ward || details.current_ward;
+      return `${w}${bed ? ` (${bed})` : ''}`;
     }
-    if (details.ward) {
-      return `${details.ward}${details.bed_number ? ` (${details.bed_number})` : ''}`;
-    }
-    return '—';
+    return 'Hospital Inpatient';
   };
 
   // Filtered activities
@@ -617,96 +640,52 @@ export default function AdminPortal() {
         </div>
       </div>
 
-      {/* KPI Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <div className="text-[11px] font-semibold text-slate-500 uppercase">Admitted Patients</div>
-          <div className="text-2xl font-extrabold text-slate-900 mt-1">
-            {summary?.total_admitted_patients ?? patients.length}
+      {/* Persistent Hospital Governance Navigation Bar (Always Visible at Top!) */}
+      <HospitalGovernanceNav
+        activeSection={activeGovSection}
+        onSelectSection={handleSelectGovSection}
+      />
+
+      {/* EMBEDDED GOVERNANCE MODULES */}
+      {activeGovSection === 'users' && <UsersPage embedded />}
+      {activeGovSection === 'rules' && <AlertRulesPage embedded />}
+      {activeGovSection === 'patients' && <PatientsPage embedded />}
+      {activeGovSection === 'reports' && <ReportsPage embedded />}
+
+      {/* OVERVIEW SECTION: KPI STATS & HOSPITAL TELEMETRY FEED */}
+      {activeGovSection === 'overview' && (
+        <>
+          {/* KPI Stats */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+              <div className="text-[11px] font-semibold text-slate-500 uppercase">Admitted Patients</div>
+              <div className="text-2xl font-extrabold text-slate-900 mt-1">
+                {summary?.total_admitted_patients ?? patients.length}
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl border border-red-200 shadow-xs">
+              <div className="text-[11px] font-semibold text-red-600 uppercase">Active Alarms</div>
+              <div className="text-2xl font-extrabold text-red-700 mt-1">
+                {summary?.active_alerts_count ?? 0}
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+              <div className="text-[11px] font-semibold text-slate-500 uppercase">Monitored Wards</div>
+              <div className="text-2xl font-extrabold text-slate-900 mt-1">
+                {summary?.active_wards_count ?? 4}
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+              <div className="text-[11px] font-semibold text-slate-500 uppercase">Vitals Recorded (24h)</div>
+              <div className="text-2xl font-extrabold text-blue-600 mt-1">
+                {summary?.vitals_recorded_24h ?? patients.length * 2}
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div className="bg-white p-4 rounded-xl border border-red-200 shadow-xs">
-          <div className="text-[11px] font-semibold text-red-600 uppercase">Active Alarms</div>
-          <div className="text-2xl font-extrabold text-red-700 mt-1">
-            {summary?.active_alerts_count ?? 0}
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <div className="text-[11px] font-semibold text-slate-500 uppercase">Monitored Wards</div>
-          <div className="text-2xl font-extrabold text-slate-900 mt-1">
-            {summary?.active_wards_count ?? 4}
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <div className="text-[11px] font-semibold text-slate-500 uppercase">Vitals Recorded (24h)</div>
-          <div className="text-2xl font-extrabold text-blue-600 mt-1">
-            {summary?.vitals_recorded_24h ?? patients.length * 2}
-          </div>
-        </div>
-      </div>
-
-      {/* Admin Quick Control Shortcuts */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs mb-6">
-        <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
-          Hospital Governance Shortcuts
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          <Link
-            to="/users"
-            className="p-3 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 transition-all flex items-center gap-2.5 group"
-          >
-            <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
-              <Users className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-slate-900">Staff Accounts</div>
-              <div className="text-[10px] text-slate-500">Doctors & Nurses</div>
-            </div>
-          </Link>
-
-          <Link
-            to="/settings/rules"
-            className="p-3 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 transition-all flex items-center gap-2.5 group"
-          >
-            <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-colors">
-              <Sliders className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-slate-900">Threshold Rules</div>
-              <div className="text-[10px] text-slate-500">Early Warning Bounds</div>
-            </div>
-          </Link>
-
-          <Link
-            to="/patients"
-            className="p-3 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 transition-all flex items-center gap-2.5 group"
-          >
-            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-              <Bed className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-slate-900">Patient Directory</div>
-              <div className="text-[10px] text-slate-500">Manage Patients & Records</div>
-            </div>
-          </Link>
-
-          <Link
-            to="/reports"
-            className="p-3 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 transition-all flex items-center gap-2.5 group"
-          >
-            <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors">
-              <FileText className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-slate-900">Clinical Reports</div>
-              <div className="text-[10px] text-slate-500">PDF Telemetry Export</div>
-            </div>
-          </Link>
-        </div>
-      </div>
 
       {/* Tabs: Live Activity Feed vs Situation Monitor */}
       <div className="flex items-center gap-2 mb-4 border-b border-slate-200">
@@ -1261,13 +1240,13 @@ export default function AdminPortal() {
                           </p>
                         </div>
                       </div>
-                      {selectedActivity.details.clinical_notes && (
+                      {(selectedActivity.details.clinical_notes || selectedActivity.details.notes) && (
                         <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg mt-2">
                           <span className="text-[10px] text-slate-500 font-bold uppercase block mb-1">
                             Nurse Clinical Observation Note
                           </span>
                           <p className="text-xs text-slate-800 italic">
-                            "{selectedActivity.details.clinical_notes}"
+                            "{selectedActivity.details.clinical_notes || selectedActivity.details.notes}"
                           </p>
                         </div>
                       )}
@@ -1304,11 +1283,11 @@ export default function AdminPortal() {
                           <span className="font-bold text-emerald-700">Verified & Logged</span>
                         </div>
                       </div>
-                      {selectedActivity.details.notes && (
+                      {(selectedActivity.details.notes || selectedActivity.details.note) && (
                         <div className="pt-2 border-t border-slate-200">
                           <span className="text-slate-500 font-medium block mb-0.5">Physician Clinical Rationale:</span>
                           <p className="text-slate-800 italic bg-white p-2.5 rounded-lg border border-slate-200">
-                            "{selectedActivity.details.notes}"
+                            "{selectedActivity.details.notes || selectedActivity.details.note}"
                           </p>
                         </div>
                       )}
@@ -1325,10 +1304,10 @@ export default function AdminPortal() {
                       <p className="text-xs text-slate-700">
                         {formatDoctorName(selectedActivity.user_name)} attended the patient bedside for clinical assessment.
                       </p>
-                      {selectedActivity.details.notes && (
+                      {(selectedActivity.details.notes || selectedActivity.details.note) && (
                         <div className="bg-white p-3 rounded-lg border border-cyan-100 text-xs text-slate-800">
                           <span className="text-[10px] font-bold text-slate-500 block mb-1">CLINICAL DIRECTIVE</span>
-                          {selectedActivity.details.notes}
+                          {selectedActivity.details.notes || selectedActivity.details.note}
                         </div>
                       )}
                     </div>
@@ -1389,6 +1368,8 @@ export default function AdminPortal() {
           onRefresh={() => loadData(true)}
         />
       )}
+    </>
+  )}
 
       {/* Activity Deletion Confirmation Dialog */}
       <ConfirmDialog

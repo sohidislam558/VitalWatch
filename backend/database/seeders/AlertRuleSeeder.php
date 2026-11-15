@@ -18,7 +18,7 @@ class AlertRuleSeeder extends Seeder
 
         $rules = [
             [
-                'name' => '[DEMO] Severe Tachycardia (>120 bpm)',
+                'name' => 'Severe Tachycardia (>120 bpm)',
                 'parameter' => 'heart_rate',
                 'operator' => 'greater_than',
                 'threshold_value' => 120.0,
@@ -28,7 +28,7 @@ class AlertRuleSeeder extends Seeder
                 'approved_by' => $admin?->id,
             ],
             [
-                'name' => '[DEMO] Severe Bradycardia (<50 bpm)',
+                'name' => 'Severe Bradycardia (<50 bpm)',
                 'parameter' => 'heart_rate',
                 'operator' => 'less_than',
                 'threshold_value' => 50.0,
@@ -38,7 +38,7 @@ class AlertRuleSeeder extends Seeder
                 'approved_by' => $admin?->id,
             ],
             [
-                'name' => '[DEMO] Critical Hypoxia (SpO2 < 92%)',
+                'name' => 'Critical Hypoxia (SpO2 < 92%)',
                 'parameter' => 'spo2',
                 'operator' => 'less_than',
                 'threshold_value' => 92.0,
@@ -48,7 +48,7 @@ class AlertRuleSeeder extends Seeder
                 'approved_by' => $admin?->id,
             ],
             [
-                'name' => '[DEMO] High Pyrexia / Fever (>= 38.5°C)',
+                'name' => 'High Pyrexia / Fever (>= 38.5°C)',
                 'parameter' => 'temperature',
                 'operator' => 'greater_than_or_equal',
                 'threshold_value' => 38.5,
@@ -58,7 +58,7 @@ class AlertRuleSeeder extends Seeder
                 'approved_by' => $admin?->id,
             ],
             [
-                'name' => '[DEMO] Severe Systolic Hypertension (>160 mmHg)',
+                'name' => 'Severe Systolic Hypertension (>160 mmHg)',
                 'parameter' => 'systolic_bp',
                 'operator' => 'greater_than',
                 'threshold_value' => 160.0,
@@ -68,7 +68,7 @@ class AlertRuleSeeder extends Seeder
                 'approved_by' => $admin?->id,
             ],
             [
-                'name' => '[DEMO] Tachypnea (>24 breaths/min)',
+                'name' => 'Tachypnea (>24 breaths/min)',
                 'parameter' => 'respiratory_rate',
                 'operator' => 'greater_than',
                 'threshold_value' => 24.0,
@@ -78,7 +78,7 @@ class AlertRuleSeeder extends Seeder
                 'approved_by' => $admin?->id,
             ],
             [
-                'name' => '[DEMO] Severe Bradypnea (<10 breaths/min)',
+                'name' => 'Severe Bradypnea (<10 breaths/min)',
                 'parameter' => 'respiratory_rate',
                 'operator' => 'less_than',
                 'threshold_value' => 10.0,

@@ -48,6 +48,15 @@ class PatientService
             $query->whereDoesntHave('activeAdmission');
         }
 
+        // Filter by admission date (calendar picker)
+        $admittedDate = $filters['admitted_date'] ?? $filters['date'] ?? null;
+        if (!empty($admittedDate)) {
+            $query->whereHas('admissions', function ($q) use ($admittedDate) {
+                $q->whereDate('admitted_at', $admittedDate)
+                  ->orWhereDate('created_at', $admittedDate);
+            });
+        }
+
         return $query->paginate($perPage);
     }
 

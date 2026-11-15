@@ -101,6 +101,7 @@ class AdmissionService
                 entityId: $admission->id,
                 details: [
                     'patient_id' => $patient->id,
+                    'patient_name' => $patient->name,
                     'patient_code' => $patient->patient_code,
                     'ward' => $admission->ward,
                     'bed_number' => $admission->bed_number,
@@ -136,6 +137,7 @@ class AdmissionService
                 entityId: $admission->id,
                 details: [
                     'patient_id' => $admission->patient_id,
+                    'patient_name' => $admission->patient?->name,
                     'ward' => $admission->ward,
                     'bed_number' => $admission->bed_number,
                     'discharged_at' => $admission->discharged_at->toDateTimeString(),
@@ -290,6 +292,8 @@ class AdmissionService
                 'icu_transfer_requested' => false,
                 'icu_transferred' => true,
                 'icu_transferred_at' => now(),
+                'icu_assessment_done' => false,
+                'icu_assessment_done_at' => null,
                 'icu_transfer_notes' => "Transfer completed from {$oldWard} ({$oldBed}) to {$newWard} ({$newBed}) by {$actor->name}.",
             ]);
 
@@ -299,6 +303,7 @@ class AdmissionService
                 entityId: $admission->id,
                 details: [
                     'patient_id' => $admission->patient_id,
+                    'patient_name' => $admission->patient?->name,
                     'from_ward' => $oldWard,
                     'from_bed' => $oldBed,
                     'to_ward' => $newWard,
@@ -433,6 +438,8 @@ class AdmissionService
                 'step_down_completed' => true,
                 'step_down_completed_at' => now(),
                 'icu_transferred' => false, // Reset ICU transferred flag!
+                'icu_assessment_done' => false,
+                'icu_assessment_done_at' => null,
                 'target_step_down_ward' => null,
                 'step_down_notes' => "Step-down completed from {$oldWard} ({$oldBed}) to {$newWard} ({$newBed}) by {$actor->name}.",
             ]);
@@ -443,6 +450,7 @@ class AdmissionService
                 entityId: $admission->id,
                 details: [
                     'patient_id' => $admission->patient_id,
+                    'patient_name' => $admission->patient?->name,
                     'from_ward' => $oldWard,
                     'from_bed' => $oldBed,
                     'to_ward' => $newWard,

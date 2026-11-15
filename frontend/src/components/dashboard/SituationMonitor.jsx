@@ -1158,25 +1158,51 @@ export default function SituationMonitor({
 
                     {/* NURSE / ADMIN QUICK VITAL ENTRY BUTTON */}
                     {canInputVitals && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setVitalEntryPatient(patient);
-                          setVitalForm({
-                            heart_rate: '',
-                            systolic_bp: '',
-                            diastolic_bp: '',
-                            spo2: '',
-                            temperature: '',
-                            respiratory_rate: '',
-                            clinical_notes: '',
-                          });
-                        }}
-                        className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm flex items-center gap-1.5 transition-colors"
-                      >
-                        <PlusCircle className="w-3.5 h-3.5" />
-                        <span>Input Vitals</span>
-                      </button>
+                      (() => {
+                        const isIcuAwaitingAssessment =
+                          patient.active_admission?.icu_transferred &&
+                          !patient.active_admission?.icu_assessment_done;
+
+                        if (isIcuAwaitingAssessment) {
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                toast(
+                                  `Patient was transferred to ICU and is awaiting attending physician clinical assessment. Vitals cannot be entered until the doctor in action marks assessment done.`,
+                                  { icon: '🔒', duration: 5500 }
+                                );
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 border border-slate-300 text-xs font-semibold shadow-xs flex items-center gap-1.5 cursor-not-allowed opacity-90 transition-colors"
+                              title="Locked: Awaiting Attending Physician Assessment Done"
+                            >
+                              <span>🔒 Awaiting Doctor's Assessment</span>
+                            </button>
+                          );
+                        }
+
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setVitalEntryPatient(patient);
+                              setVitalForm({
+                                heart_rate: '',
+                                systolic_bp: '',
+                                diastolic_bp: '',
+                                spo2: '',
+                                temperature: '',
+                                respiratory_rate: '',
+                                clinical_notes: '',
+                              });
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <PlusCircle className="w-3.5 h-3.5" />
+                            <span>Input Vitals</span>
+                          </button>
+                        );
+                      })()
                     )}
                   </div>
                 </div>

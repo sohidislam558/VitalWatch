@@ -16,6 +16,8 @@ class AuditLogTest extends TestCase
     {
         parent::setUp();
 
+        AuditLog::query()->delete();
+
         $this->admin = User::firstOrCreate(
             ['email' => 'test_admin_audit@vitalwatch.hospital'],
             [

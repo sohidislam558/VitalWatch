@@ -12,9 +12,10 @@ import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { Sliders, Plus, Edit, ShieldAlert } from 'lucide-react';
+import HospitalGovernanceNav from '../../components/admin/HospitalGovernanceNav';
 import toast from 'react-hot-toast';
 
-export default function AlertRules() {
+export default function AlertRules({ embedded = false }) {
   const { user } = useAuth();
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -104,8 +105,11 @@ export default function AlertRules() {
 
   const isAdmin = canManageAlertRules(user);
 
-  return (
-    <PageContainer>
+  const content = (
+    <div className="w-full">
+      {!embedded && user?.role === 'admin' && (
+        <HospitalGovernanceNav activeSection="rules" />
+      )}
       <PageHeader
         title="Configurable Alert Engine Rules"
         subtitle="Manage physiological triggers and priority levels for automated patient alerts"
@@ -146,7 +150,9 @@ export default function AlertRules() {
 
                 return (
                   <tr key={rule.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-3 font-semibold text-slate-900">{rule.name}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-900">
+                      {rule.name?.replace(/^\[DEMO\]\s*/i, '')}
+                    </td>
                     <td className="px-4 py-3 text-slate-700 font-mono capitalize">
                       {rule.parameter.replace('_', ' ')}
                     </td>
@@ -208,7 +214,7 @@ export default function AlertRules() {
           <Input
             label="Rule Name / Description"
             id="rule_name"
-            placeholder="e.g. [DEMO] Critical Bradycardia (<45 bpm)"
+            placeholder="e.g. Critical Bradycardia (<45 bpm)"
             required
             error={errors.name?.message}
             {...register('name', { required: 'Rule name is required' })}
@@ -289,7 +295,13 @@ export default function AlertRules() {
           </div>
         </form>
       </Modal>
-    </PageContainer>
+    </div>
   );
+
+  if (embedded) {
+    return content;
+  }
+
+  return <PageContainer>{content}</PageContainer>;
 }
 
