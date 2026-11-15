@@ -4,9 +4,8 @@ import {
   LayoutDashboard,
   Users,
   Sliders,
-  Bed,
   FileText,
-  Activity,
+  UserCheck,
   ShieldCheck,
 } from 'lucide-react';
 
@@ -17,38 +16,21 @@ export default function HospitalGovernanceNav({
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Exactly matches sidebar order (top to bottom) and titles
   const navItems = [
     {
       id: 'overview',
-      label: 'Activity Stream & Telemetry',
+      label: 'Admin Activity Feed',
       subtitle: 'Audit Log & Situation Monitor',
-      icon: Activity,
+      icon: LayoutDashboard,
       path: '/dashboard',
-      color: 'slate',
-    },
-    {
-      id: 'users',
-      label: 'Staff Accounts',
-      subtitle: 'Physicians & Nurses',
-      icon: Users,
-      path: '/dashboard?section=users',
-      standalonePath: '/users',
       color: 'blue',
-    },
-    {
-      id: 'rules',
-      label: 'Threshold Rules',
-      subtitle: 'Early Warning Bounds',
-      icon: Sliders,
-      path: '/dashboard?section=rules',
-      standalonePath: '/settings/rules',
-      color: 'amber',
     },
     {
       id: 'patients',
       label: 'Patient Directory',
       subtitle: 'Roster & Admissions',
-      icon: Bed,
+      icon: Users,
       path: '/dashboard?section=patients',
       standalonePath: '/patients',
       color: 'emerald',
@@ -61,6 +43,24 @@ export default function HospitalGovernanceNav({
       path: '/dashboard?section=reports',
       standalonePath: '/reports',
       color: 'purple',
+    },
+    {
+      id: 'users',
+      label: 'Staff Accounts',
+      subtitle: 'Physicians & Nurses',
+      icon: UserCheck,
+      path: '/dashboard?section=users',
+      standalonePath: '/users',
+      color: 'blue',
+    },
+    {
+      id: 'rules',
+      label: 'Alert Threshold Rules',
+      subtitle: 'Early Warning Bounds',
+      icon: Sliders,
+      path: '/dashboard?section=rules',
+      standalonePath: '/settings/rules',
+      color: 'amber',
     },
   ];
 
@@ -100,33 +100,18 @@ export default function HospitalGovernanceNav({
           const Icon = item.icon;
           const isActive = activeSection === item.id;
 
-          const colorClasses = {
-            slate: isActive
-              ? 'bg-slate-900 text-white border-slate-900 shadow-md shadow-slate-900/20'
-              : 'hover:bg-slate-50 border-slate-200 text-slate-700',
-            blue: isActive
-              ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/25'
-              : 'hover:bg-blue-50/60 border-slate-200 text-slate-700 hover:border-blue-300',
-            amber: isActive
-              ? 'bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-600/25'
-              : 'hover:bg-amber-50/60 border-slate-200 text-slate-700 hover:border-amber-300',
-            emerald: isActive
-              ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/25'
-              : 'hover:bg-emerald-50/60 border-slate-200 text-slate-700 hover:border-emerald-300',
-            purple: isActive
-              ? 'bg-purple-600 text-white border-purple-600 shadow-md shadow-purple-600/25'
-              : 'hover:bg-purple-50/60 border-slate-200 text-slate-700 hover:border-purple-300',
-          }[item.color];
+          const colorClasses = isActive
+            ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/25 ring-2 ring-blue-500/20'
+            : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300';
 
           const iconBg = isActive
             ? 'bg-white/20 text-white'
             : {
-                slate: 'bg-slate-100 text-slate-700',
                 blue: 'bg-blue-100 text-blue-700',
-                amber: 'bg-amber-100 text-amber-700',
                 emerald: 'bg-emerald-100 text-emerald-700',
                 purple: 'bg-purple-100 text-purple-700',
-              }[item.color];
+                amber: 'bg-amber-100 text-amber-700',
+              }[item.color] || 'bg-slate-100 text-slate-700';
 
           return (
             <button

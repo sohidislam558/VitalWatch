@@ -717,33 +717,23 @@ export default function AdminPortal() {
       {/* TAB 1: LIVE ACTIVITY STREAM (Organized & Date-Wise Formation) */}
       {activeTab === 'activity' && (
         <div className="space-y-5">
-          {/* Top Info Banner */}
-          <div className="bg-slate-900 text-white p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
-            <div className="flex items-center gap-3">
+          {/* Top Actions: Total Events & Clear All Logs */}
+          <div className="bg-slate-900 text-white px-4 py-3 rounded-xl flex items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
-              <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                  Real-Time Clinical Activity Audit Log
-                </h3>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  Organized date-wise stream tracking nurse vital entries, physician bedside interventions, ICU escalations, and ward step-down de-escalations.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-              <span className="px-2.5 py-1 rounded-full bg-white/10 text-emerald-300 text-[11px] font-mono border border-white/10">
+              <span className="px-2.5 py-1 rounded-full bg-white/10 text-emerald-300 text-[11px] font-mono border border-white/10 font-bold">
                 {activities.length} Total Events
               </span>
-              <button
-                type="button"
-                onClick={() => openDeleteModal('all')}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 hover:text-white text-[11px] font-semibold border border-rose-500/30 transition-all cursor-pointer"
-                title="Permanently wipe all activity log history"
-              >
-                <Trash2 className="w-3 h-3 text-rose-400" />
-                <span>Clear All Logs</span>
-              </button>
             </div>
+            <button
+              type="button"
+              onClick={() => openDeleteModal('all')}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 hover:text-white text-[11px] font-semibold border border-rose-500/30 transition-all cursor-pointer"
+              title="Permanently wipe all activity log history"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+              <span>Clear All Logs</span>
+            </button>
           </div>
 
           {/* Calendar Date Filtration Bar */}

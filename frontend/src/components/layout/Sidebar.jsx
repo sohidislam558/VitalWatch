@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink, Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
@@ -15,6 +15,7 @@ import { useNotification } from '../../context/NotificationContext';
 export default function Sidebar({ onClose }) {
   const { user } = useAuth();
   const { unreadAlertCount } = useNotification();
+  const location = useLocation();
 
   const isNurse = user?.role === 'nurse';
   const isDoctor = user?.role === 'doctor';
@@ -43,15 +44,56 @@ export default function Sidebar({ onClose }) {
       { to: '/reports', label: 'Clinical Reports', icon: FileText },
     ];
   } else {
-    // Admin (Simplified Governance & Monitoring Feed)
+    // Admin (Ordered strictly matching top-to-bottom and Hospital Governance Nav)
     links = [
-      { to: '/dashboard', label: 'Admin Activity Feed', icon: LayoutDashboard },
-      { to: '/dashboard?section=patients', label: 'Patient Directory', icon: Users },
-      { to: '/dashboard?section=reports', label: 'Clinical Reports', icon: FileText },
-      { to: '/dashboard?section=users', label: 'Staff Accounts', icon: UserCheck },
-      { to: '/dashboard?section=rules', label: 'Alert Threshold Rules', icon: Sliders },
+      { to: '/dashboard', label: 'Admin Activity Feed', icon: LayoutDashboard, id: 'overview' },
+      { to: '/dashboard?section=patients', label: 'Patient Directory', icon: Users, id: 'patients' },
+      { to: '/dashboard?section=reports', label: 'Clinical Reports', icon: FileText, id: 'reports' },
+      { to: '/dashboard?section=users', label: 'Staff Accounts', icon: UserCheck, id: 'users' },
+      { to: '/dashboard?section=rules', label: 'Alert Threshold Rules', icon: Sliders, id: 'rules' },
     ];
   }
+
+  // Active item determination: Only the selected item has the blue background
+  const searchParams = new URLSearchParams(location.search);
+  const currentSection = searchParams.get('section') || 'overview';
+
+  const isLinkActive = (link) => {
+    if (isAdmin) {
+      if (link.id === 'overview') {
+        return (
+          location.pathname === '/dashboard' &&
+          (!searchParams.get('section') || searchParams.get('section') === 'overview')
+        );
+      }
+      if (link.id === 'patients') {
+        return (
+          (location.pathname === '/dashboard' && currentSection === 'patients') ||
+          location.pathname.startsWith('/patients')
+        );
+      }
+      if (link.id === 'reports') {
+        return (
+          (location.pathname === '/dashboard' && currentSection === 'reports') ||
+          location.pathname.startsWith('/reports')
+        );
+      }
+      if (link.id === 'users') {
+        return (
+          (location.pathname === '/dashboard' && currentSection === 'users') ||
+          location.pathname.startsWith('/users')
+        );
+      }
+      if (link.id === 'rules') {
+        return (
+          (location.pathname === '/dashboard' && currentSection === 'rules') ||
+          location.pathname.startsWith('/settings/rules')
+        );
+      }
+    }
+
+    return location.pathname === link.to;
+  };
 
   return (
     <div className="flex flex-col h-full bg-slate-900 text-slate-300 w-64 border-r border-slate-800">
@@ -81,18 +123,17 @@ export default function Sidebar({ onClose }) {
 
         {links.map((link) => {
           const Icon = link.icon;
+          const isActive = isLinkActive(link);
           return (
-            <NavLink
+            <Link
               key={link.to}
               to={link.to}
               onClick={onClose}
-              className={({ isActive }) =>
-                `flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
-                  isActive
-                    ? 'bg-blue-600 text-white font-semibold shadow-sm'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                }`
-              }
+              className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                isActive
+                  ? 'bg-blue-600 text-white font-semibold shadow-sm'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              }`}
             >
               <div className="flex items-center gap-3">
                 <Icon className="w-4 h-4 flex-shrink-0" />
@@ -103,7 +144,7 @@ export default function Sidebar({ onClose }) {
                   {link.badge}
                 </span>
               )}
-            </NavLink>
+            </Link>
           );
         })}
       </nav>
