@@ -979,15 +979,15 @@ export default function AdminPortal() {
                   {/* Date Enterprise Audit Table */}
                   <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse text-xs">
+                      <table className="w-full text-left border-collapse text-xs table-fixed">
                         <thead>
                           <tr className="bg-slate-50/90 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                            <th className="py-2.5 px-4 w-24">Time</th>
-                            <th className="py-2.5 px-3 w-40">Event Type</th>
-                            <th className="py-2.5 px-3 w-44">Staff (Actor)</th>
-                            <th className="py-2.5 px-3 w-40">Patient / Ward</th>
-                            <th className="py-2.5 px-4 min-w-[260px]">Clinical Summary</th>
-                            <th className="py-2.5 px-3 w-28 text-right">Actions</th>
+                            <th className="py-2.5 px-3 w-20 whitespace-nowrap">Time</th>
+                            <th className="py-2.5 px-2.5 w-32 whitespace-nowrap">Event Type</th>
+                            <th className="py-2.5 px-2.5 w-36 whitespace-nowrap">Staff (Actor)</th>
+                            <th className="py-2.5 px-2.5 w-32 whitespace-nowrap">Patient / Ward</th>
+                            <th className="py-2.5 px-3">Clinical Summary</th>
+                            <th className="py-2.5 px-2.5 w-24 text-right whitespace-nowrap">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -1006,7 +1006,7 @@ export default function AdminPortal() {
                                 }`}
                               >
                                 {/* Time */}
-                                <td className="py-2.5 px-4 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                                <td className="py-2.5 px-3 font-mono text-[11px] text-slate-500 whitespace-nowrap">
                                   {new Date(item.created_at).toLocaleTimeString([], {
                                     hour: '2-digit',
                                     minute: '2-digit',
@@ -1015,23 +1015,24 @@ export default function AdminPortal() {
                                 </td>
 
                                 {/* Action / Event Badge */}
-                                <td className="py-2.5 px-3 whitespace-nowrap">
+                                <td className="py-2.5 px-2.5 whitespace-nowrap overflow-hidden">
                                   <span
-                                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${badge.color}`}
+                                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${badge.color} max-w-full truncate`}
+                                    title={badge.label}
                                   >
                                     {badge.icon}
-                                    <span>{badge.label}</span>
+                                    <span className="truncate">{badge.label}</span>
                                   </span>
                                 </td>
 
                                 {/* Staff / Actor */}
-                                <td className="py-2.5 px-3 whitespace-nowrap">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="font-semibold text-slate-800">
+                                <td className="py-2.5 px-2.5 whitespace-nowrap overflow-hidden">
+                                  <div className="flex items-center gap-1.5 max-w-full">
+                                    <span className="font-semibold text-slate-800 text-xs truncate max-w-[85px]" title={item.user_name}>
                                       {item.user_name ? cleanPersonName(item.user_name) : 'System Auto'}
                                     </span>
                                     <span
-                                      className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider ${
+                                      className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider flex-shrink-0 ${
                                         item.role === 'nurse'
                                           ? 'bg-blue-100 text-blue-700'
                                           : item.role === 'doctor'
@@ -1047,27 +1048,29 @@ export default function AdminPortal() {
                                 </td>
 
                                 {/* Patient / Target */}
-                                <td className="py-2.5 px-3 whitespace-nowrap">
-                                  <span className="font-medium text-slate-700 text-xs">{target}</span>
+                                <td className="py-2.5 px-2.5 whitespace-nowrap overflow-hidden">
+                                  <span className="font-medium text-slate-700 text-xs block truncate" title={target}>
+                                    {target}
+                                  </span>
                                 </td>
 
                                 {/* Clinical Highlight */}
-                                <td className="py-2.5 px-4 text-slate-600">
-                                  <p className="truncate max-w-md text-xs font-normal text-slate-700" title={highlight}>
+                                <td className="py-2.5 px-3 text-slate-600 overflow-hidden">
+                                  <p className="truncate text-xs font-normal text-slate-700" title={highlight}>
                                     {highlight}
                                   </p>
                                 </td>
 
                                 {/* Actions: Inspect & Delete */}
-                                <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                                  <div className="flex items-center justify-end gap-1.5">
+                                <td className="py-2.5 px-2.5 text-right whitespace-nowrap">
+                                  <div className="flex items-center justify-end gap-1">
                                     <button
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setSelectedActivity(item);
                                       }}
-                                      className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-blue-700 bg-slate-100 group-hover:bg-blue-100/70 rounded-md transition-colors"
+                                      className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-blue-700 bg-slate-100 group-hover:bg-blue-100/70 rounded-md transition-colors cursor-pointer"
                                       title="View event details"
                                     >
                                       <Eye className="w-3.5 h-3.5" />

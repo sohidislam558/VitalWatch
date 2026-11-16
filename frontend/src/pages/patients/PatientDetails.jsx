@@ -219,7 +219,7 @@ export default function PatientDetails() {
                 View Complete Log &rarr;
               </button>
             </div>
-            <VitalHistoryTable vitals={vitalRecords.slice(0, 5)} />
+            <VitalHistoryTable vitals={vitalRecords.slice(0, 5)} showPatient={false} />
           </div>
         </div>
       )}
@@ -232,7 +232,7 @@ export default function PatientDetails() {
 
       {activeTab === 'vitals' && (
         <div className="space-y-4">
-          <VitalHistoryTable vitals={vitalRecords} />
+          <VitalHistoryTable vitals={vitalRecords} showPatient={false} />
         </div>
       )}
 

@@ -1,10 +1,12 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { formatDateTime } from '../../utils/formatDate';
 import { formatHeartRate, formatBloodPressure, formatSpO2, formatTemperature, formatRespiratoryRate } from '../../utils/formatVitals';
+import { formatStaffName } from '../../utils/formatUser';
 import EmptyState from '../common/EmptyState';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, User } from 'lucide-react';
 
-export default function VitalHistoryTable({ vitals = [], loading = false }) {
+export default function VitalHistoryTable({ vitals = [], loading = false, showPatient = true }) {
   if (vitals.length === 0) {
     return <EmptyState title="No vital measurements recorded" description="Start by adding the patient's first vital signs observation." />;
   }
@@ -15,6 +17,7 @@ export default function VitalHistoryTable({ vitals = [], loading = false }) {
         <table className="min-w-full divide-y divide-slate-200 text-xs">
           <thead className="bg-slate-50 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
             <tr>
+              {showPatient && <th className="px-4 py-3 text-left">Patient</th>}
               <th className="px-4 py-3 text-left">Observed Date/Time</th>
               <th className="px-4 py-3 text-right">Heart Rate</th>
               <th className="px-4 py-3 text-right">Blood Pressure</th>
@@ -28,12 +31,39 @@ export default function VitalHistoryTable({ vitals = [], loading = false }) {
           <tbody className="divide-y divide-slate-100 bg-white">
             {vitals.map((v) => {
               const hasAlert = v.alerts && v.alerts.length > 0;
+              const patient = v.patient;
+              const admission = v.admission;
 
               return (
                 <tr
                   key={v.id}
                   className={`transition-colors ${hasAlert ? 'bg-amber-50/20 hover:bg-amber-50/40' : 'hover:bg-slate-50'}`}
                 >
+                  {showPatient && (
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {patient ? (
+                        <div>
+                          <Link
+                            to={`/patients/${patient.id}`}
+                            className="font-bold text-blue-600 hover:text-blue-800 hover:underline inline-flex items-center gap-1.5"
+                          >
+                            <User className="w-3.5 h-3.5 text-slate-400" />
+                            <span>{patient.name}</span>
+                          </Link>
+                          <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mt-0.5">
+                            {patient.patient_code && (
+                              <span className="font-mono">{patient.patient_code}</span>
+                            )}
+                            {admission?.ward && (
+                              <span>&bull; {admission.ward}{admission.bed_number ? ` (${admission.bed_number})` : ''}</span>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 font-medium italic">Patient #{v.patient_id}</span>
+                      )}
+                    </td>
+                  )}
                   <td className="px-4 py-3 text-slate-700 whitespace-nowrap font-medium">
                     <div className="flex items-center gap-1.5">
                       {hasAlert && (
@@ -59,11 +89,11 @@ export default function VitalHistoryTable({ vitals = [], loading = false }) {
                   <td className="px-4 py-3 text-right font-medium text-slate-700">
                     {formatRespiratoryRate(v.respiratory_rate)}
                   </td>
-                  <td className="px-4 py-3 text-slate-600 font-medium">
-                    {v.recorder?.name || 'Staff Member'}
+                  <td className="px-4 py-3 text-slate-600 font-medium whitespace-nowrap">
+                    {v.recorder ? formatStaffName(v.recorder.name, v.recorder.role) : 'Staff Member'}
                   </td>
-                  <td className="px-4 py-3 text-slate-500 max-w-xs truncate">
-                    {v.notes || '—'}
+                  <td className="px-4 py-3 text-slate-500 max-w-xs truncate" title={v.clinical_notes || v.notes || ''}>
+                    {v.clinical_notes || v.notes || '—'}
                   </td>
                 </tr>
               );

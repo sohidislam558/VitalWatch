@@ -86,7 +86,7 @@ export default function AdmissionDetails() {
 
       <div className="space-y-3">
         <h3 className="text-sm font-bold text-slate-800">Vital Signs Observations During This Admission</h3>
-        <VitalHistoryTable vitals={admission.vital_records || []} />
+        <VitalHistoryTable vitals={admission.vital_records || []} showPatient={false} />
       </div>
     </PageContainer>
   );
