@@ -30,7 +30,7 @@ class AlertPolicy
     public function resolve(User $user, Alert $alert): bool
     {
         // Physicians / Doctors and Admins can formally resolve clinical alerts
-        return in_array($user->role, ['admin', 'doctor'], true) && in_array($alert->status, ['active', 'acknowledged', 'doctor_in_action'], true);
+        return in_array($user->role, ['admin', 'doctor'], true) && in_array($alert->status, ['active', 'acknowledged', 'doctor_in_action', 'resolved'], true);
     }
 
     public function delete(User $user, Alert $alert): bool

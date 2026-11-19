@@ -238,6 +238,17 @@ class AlertService
     {
         $actionNote = $note ?: "Bedside assessment completed by " . User::formatDoctorName($user->name) . ". Clinical alert resolved.";
 
+        // Early return for idempotent retry: if already resolved and no remaining active alerts exist
+        if ($alert->status === 'resolved') {
+            $hasUnresolved = Alert::where('patient_id', $alert->patient_id)
+                ->whereIn('status', ['active', 'doctor_in_action', 'acknowledged'])
+                ->exists();
+
+            if (!$hasUnresolved) {
+                return $alert->fresh(['patient', 'vitalRecord', 'alertRule', 'acknowledgements.user']);
+            }
+        }
+
         // Resolve ALL active, acknowledged, or doctor_in_action alerts for this patient!
         $patientAlerts = Alert::where('patient_id', $alert->patient_id)
             ->whereIn('status', ['active', 'doctor_in_action', 'acknowledged'])
@@ -245,13 +256,17 @@ class AlertService
 
         foreach ($patientAlerts as $pAlert) {
             $pAlert->update(['status' => 'resolved']);
-            AlertAcknowledgement::create([
-                'alert_id' => $pAlert->id,
-                'user_id' => $user->id,
-                'action' => 'resolved',
-                'note' => $actionNote,
-                'created_at' => now(),
-            ]);
+            AlertAcknowledgement::firstOrCreate(
+                [
+                    'alert_id' => $pAlert->id,
+                    'user_id' => $user->id,
+                    'action' => 'resolved',
+                ],
+                [
+                    'note' => $actionNote,
+                    'created_at' => now(),
+                ]
+            );
         }
 
         $alert->update(['status' => 'resolved']);

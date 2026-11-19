@@ -75,5 +75,65 @@ class AlertTest extends TestCase
             'action' => 'acknowledged',
         ]);
     }
+
+    public function test_doctor_can_resolve_alert_and_resolution_is_idempotent(): void
+    {
+        [$patient, $admission] = $this->createTestPatient();
+        $nurseHeaders = $this->getAuthHeader('nurse');
+
+        $this->withHeaders($nurseHeaders)->postJson('/api/vitals', [
+            'patient_id' => $patient->id,
+            'admission_id' => $admission->id,
+            'heart_rate' => 145.0,
+            'systolic_bp' => 120.0,
+            'diastolic_bp' => 80.0,
+            'spo2' => 98.0,
+            'temperature' => 37.0,
+            'respiratory_rate' => 18.0,
+            'measured_at' => now()->toDateTimeString(),
+        ]);
+
+        $alert = Alert::where('patient_id', $patient->id)->where('status', 'active')->first();
+        $this->assertNotNull($alert);
+
+        $docHeaders = $this->getAuthHeader('doctor');
+
+        // 1. First resolution call
+        $response1 = $this->withHeaders($docHeaders)
+            ->patchJson("/api/alerts/{$alert->id}/resolve", [
+                'note' => 'Bedside assessment completed, patient stabilized.',
+            ]);
+
+        $response1->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'status' => 'resolved',
+                ],
+            ]);
+
+        $this->assertEquals(1, \App\Models\AlertAcknowledgement::where('alert_id', $alert->id)->where('action', 'resolved')->count());
+        $auditLogsCount1 = \App\Models\AuditLog::where('action', 'ALERT_RESOLVED')->where('entity_id', $alert->id)->count();
+        $this->assertEquals(1, $auditLogsCount1);
+
+        // 2. Second (idempotent retry) resolution call on the already-resolved alert
+        auth()->forgetGuards();
+        $response2 = $this->withHeaders($docHeaders)
+            ->patchJson("/api/alerts/{$alert->id}/resolve", [
+                'note' => 'Bedside assessment completed, patient stabilized.',
+            ]);
+
+        $response2->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'status' => 'resolved',
+                ],
+            ]);
+
+        // Acknowledgements and audit logs must remain exactly 1, not duplicated
+        $this->assertEquals(1, \App\Models\AlertAcknowledgement::where('alert_id', $alert->id)->where('action', 'resolved')->count());
+        $this->assertEquals(1, \App\Models\AuditLog::where('action', 'ALERT_RESOLVED')->where('entity_id', $alert->id)->count());
+    }
 }
 

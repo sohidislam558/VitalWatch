@@ -606,4 +606,127 @@ class AdmissionTest extends TestCase
         ]);
         $responseSuccess2->assertStatus(200);
     }
+
+    public function test_complete_icu_transfer_is_idempotent_and_rejects_unrequested_completion(): void
+    {
+        [$patient, $admission] = $this->createTestPatient('General Medical Ward', 'Bed 201');
+        $docHeaders = $this->getAuthHeader('doctor');
+        $nurseHeaders = $this->getAuthHeader('nurse');
+
+        // 1. Attempting complete-icu-transfer without prior request must fail with 422
+        $unrequestedResponse = $this->withHeaders($nurseHeaders)
+            ->postJson("/api/admissions/{$admission->id}/complete-icu-transfer", [
+                'ward' => 'Intensive Care Unit (ICU)',
+                'bed_number' => 'ICU-04',
+            ]);
+        $unrequestedResponse->assertStatus(422)
+            ->assertJsonValidationErrors(['icu_transfer']);
+
+        // 2. Doctor requests transfer
+        auth()->forgetGuards();
+        $this->withHeaders($docHeaders)
+            ->postJson("/api/admissions/{$admission->id}/request-icu-transfer", [
+                'target_ward' => 'Intensive Care Unit (ICU)',
+            ]);
+
+        // 3. Nurse completes transfer
+        auth()->forgetGuards();
+        $complete1 = $this->withHeaders($nurseHeaders)
+            ->postJson("/api/admissions/{$admission->id}/complete-icu-transfer", [
+                'ward' => 'Intensive Care Unit (ICU)',
+                'bed_number' => 'ICU-04',
+            ]);
+        $complete1->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'ward' => 'Intensive Care Unit (ICU)',
+                    'bed_number' => 'ICU-04',
+                    'icu_transferred' => true,
+                ],
+            ]);
+
+        $auditCount1 = \App\Models\AuditLog::where('action', 'PATIENT_TRANSFERRED_TO_ICU')->where('entity_id', $admission->id)->count();
+        $this->assertEquals(1, $auditCount1);
+
+        // 4. Repeated (idempotent retry) complete-icu-transfer with same bed succeeds without duplicating audit log
+        auth()->forgetGuards();
+        $complete2 = $this->withHeaders($nurseHeaders)
+            ->postJson("/api/admissions/{$admission->id}/complete-icu-transfer", [
+                'ward' => 'Intensive Care Unit (ICU)',
+                'bed_number' => 'ICU-04',
+            ]);
+        $complete2->assertStatus(200);
+
+        $auditCount2 = \App\Models\AuditLog::where('action', 'PATIENT_TRANSFERRED_TO_ICU')->where('entity_id', $admission->id)->count();
+        $this->assertEquals(1, $auditCount2);
+    }
+
+    public function test_complete_step_down_is_idempotent_and_rejects_unrequested_completion(): void
+    {
+        $doctor = User::where('role', 'doctor')->first();
+        $nurse = User::where('role', 'nurse')->first();
+
+        $patient = Patient::create([
+            'patient_code' => 'PAT-STEP-IDEMP',
+            'name' => 'Idempotent StepDown Patient',
+            'date_of_birth' => '1985-05-15',
+            'gender' => 'male',
+        ]);
+        $admission = Admission::create([
+            'patient_id' => $patient->id,
+            'ward' => 'Intensive Care Unit (ICU)',
+            'bed_number' => 'ICU-02',
+            'status' => 'admitted',
+            'admitted_at' => now()->subDays(3),
+            'icu_transferred' => true,
+        ]);
+
+        // 1. Attempting complete-step-down without request must fail with 422
+        $unrequestedResponse = $this->actingAs($nurse, 'sanctum')
+            ->postJson("/api/admissions/{$admission->id}/complete-step-down", [
+                'ward' => 'General Medical Ward',
+                'bed_number' => 'Bed 205',
+            ]);
+        $unrequestedResponse->assertStatus(422)
+            ->assertJsonValidationErrors(['step_down']);
+
+        // 2. Doctor requests step down
+        $admission->update([
+            'step_down_requested' => true,
+            'step_down_requested_at' => now(),
+            'step_down_requested_by' => $doctor->id,
+            'target_step_down_ward' => 'General Medical Ward',
+        ]);
+
+        // 3. Nurse completes step down
+        $complete1 = $this->actingAs($nurse, 'sanctum')
+            ->postJson("/api/admissions/{$admission->id}/complete-step-down", [
+                'ward' => 'General Medical Ward',
+                'bed_number' => 'Bed 205',
+            ]);
+        $complete1->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'ward' => 'General Medical Ward',
+                    'bed_number' => 'Bed 205',
+                    'step_down_completed' => true,
+                ],
+            ]);
+
+        $auditCount1 = \App\Models\AuditLog::where('action', 'PATIENT_STEPPED_DOWN')->where('entity_id', $admission->id)->count();
+        $this->assertEquals(1, $auditCount1);
+
+        // 4. Repeated (idempotent retry) complete-step-down succeeds without duplicating audit log
+        $complete2 = $this->actingAs($nurse, 'sanctum')
+            ->postJson("/api/admissions/{$admission->id}/complete-step-down", [
+                'ward' => 'General Medical Ward',
+                'bed_number' => 'Bed 205',
+            ]);
+        $complete2->assertStatus(200);
+
+        $auditCount2 = \App\Models\AuditLog::where('action', 'PATIENT_STEPPED_DOWN')->where('entity_id', $admission->id)->count();
+        $this->assertEquals(1, $auditCount2);
+    }
 }

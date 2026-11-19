@@ -268,6 +268,15 @@ class AdmissionService
      */
     public function completeIcuTransfer(Admission $admission, User $actor, string $newWard, string $newBed, string $ip): Admission
     {
+        if (!$admission->icu_transfer_requested) {
+            if ($admission->icu_transferred && $admission->ward === $newWard && $admission->bed_number === $newBed) {
+                return $admission->fresh(['patient', 'icuTransferRequester']);
+            }
+            throw ValidationException::withMessages([
+                'icu_transfer' => ["This patient does not have a pending emergency ICU transfer request."],
+            ]);
+        }
+
         // Enforce strict FIFO Priority Queue order: Prior request must be allocated first
         $topPriorityRequest = Admission::where('icu_transfer_requested', true)
             ->where('status', 'admitted')
@@ -430,6 +439,15 @@ class AdmissionService
         if (in_array($newWard, $icuWards, true)) {
             throw ValidationException::withMessages([
                 'ward' => ["Step-down target ward must be a general or step-down ward, not an intensive care unit."],
+            ]);
+        }
+
+        if (!$admission->step_down_requested) {
+            if ($admission->step_down_completed && $admission->ward === $newWard && $admission->bed_number === $newBed) {
+                return $admission->fresh(['patient', 'stepDownRequester']);
+            }
+            throw ValidationException::withMessages([
+                'step_down' => ["This patient does not have a pending ward step-down transfer request."],
             ]);
         }
 
