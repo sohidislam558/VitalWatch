@@ -11,21 +11,27 @@
 VitalWatch is a hospital-based patient vital signs monitoring and early warning support system. It provides three distinct user roles with dedicated interfaces:
 
 1. **Registered Nurse / Bedside Caregiver**:
-   - Register and admit patients to wards (e.g., Cardiology ICU, Bed 101).
-   - Manually input vital signs (Heart Rate, Systolic/Diastolic BP, SpO2, Temperature, Respiratory Rate).
-   - Observe the **Bedside Situation Monitor** displaying plain-English, real-time patient conditions.
-   - Recording normalized follow-up vitals automatically clears alarms and restores status to **Normal & Stable**.
+   - Register and admit patients to wards and assign available beds (with bed occupancy conflict validation).
+   - Manually input bedside vital signs (Heart Rate, Systolic/Diastolic BP, SpO2, Temperature, Respiratory Rate).
+   - Observe the **Bedside Situation Monitor** displaying plain-English, real-time patient conditions (`Emergency`, `Doctor in Action`, `Attention Needed`, `Normal & Stable`, `ICU Observation`).
+   - Execute Emergency ICU and Ward Step-Down bed allocations strictly following the **Strict FIFO Priority Queue**.
+   - Input lock protection: post-ICU transfer vitals entry is safely locked until the attending physician completes their bedside assessment.
+   - Recording normalized follow-up vitals automatically clears active alarms and restores status to **Normal & Stable**.
 
-2. **Attending Doctor / Physician**:
-   - View real-time patient situation telemetry and vital trend charts (read-only for vital inputs).
-   - Instant emergency notifications triggered when vital signs breach threshold rules.
+2. **Attending Doctor / Physician (MO / MD)**:
+   - View real-time patient situation telemetry and physiological vital trend charts (read-only for vital inputs).
+   - Receive instant emergency notifications when vital signs breach early warning threshold rules.
    - Respond at bedside with **"🩺 Doctor in Action"**.
-   - **Single-Patient Concurrency Limit**: A doctor can only attend **one patient at a time**.
-   - Simple 1-click **"✅ Assessment Done"** to resolve the emergency alert and become available for other patients.
+   - **Single-Patient Concurrency Limit**: A doctor can only attend **one patient at a time** to prevent dangerous clinical divided attention.
+   - 1-Click **"✅ Assessment Done"** to resolve emergency alerts, clear the attendance lock, and unlock nurse vital entry.
+   - Authorize acute escalations: **"🚑 Request ICU"** (prioritized strictly by request time) and **"🏥 Request Step-Down"** (when patient condition stabilizes).
+   - Exclusive authority to formally discharge inpatients from hospital care.
 
 3. **Hospital Administrator**:
-   - Oversee the live hospital activity stream (vitals recorded by nurses and bedside actions by doctors).
-   - Manage hospital staff accounts, ward directories, threshold rules, and PDF clinical reports.
+   - Oversee the enterprise clinical activity stream with a responsive `table-fixed` audit table and slide-over inspection drawer.
+   - Filter audit events using calendar date pickers, quick presets (Today, Yesterday, Last 7 Days), and category tabs.
+   - Manage hospital governance: staff accounts and identity badges, early warning alert rules, and downloadable multi-page PDF clinical dossiers.
+   - Dedicated log pruning controls (specific event deletion, date-range pruning, or complete clear).
 
 ---
 

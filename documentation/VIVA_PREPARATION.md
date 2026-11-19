@@ -4,36 +4,56 @@ This guide is designed for Computer Science & Engineering (CSE) students defendi
 
 ---
 
-## 1. Core System Concept
+## 1. Core System Concept & Motivation
+
 ### What is VitalWatch?
-VitalWatch is an academic hospital clinical decision support prototype designed for authorized healthcare professionals (Admins, Doctors, Nurses) to systematically record, monitor, and visualize patient vital signs while automatically identifying threshold violations via a configurable alert engine.
+VitalWatch is an academic hospital clinical decision support and patient early warning prototype engineered for authorized healthcare staff (Administrators, Doctors/MOs, Nurses). It centralizes real-time physiological telemetry, identifies threshold violations via an automated alert engine, manages acute patient transfers with strict chronological FIFO queuing, and tracks all clinical actions in an immutable audit trail.
 
 ### Why was it developed?
-In hospital wards, routine vital signs are often recorded manually on paper charts at the foot of patient beds. This leads to delayed identification of deteriorating physiological trends, lost data, and fragmented communication across shift handoffs. VitalWatch centralizes data entry, visualizes time-series trends, and triggers immediate early warning alerts without attempting to replace professional human diagnosis.
+In general hospital wards, vital signs are frequently recorded on paper clipboards at the foot of patient beds. This creates critical clinical vulnerabilities:
+1. **Delayed Detection:** Hours can pass before physiological deterioration is noticed by an attending physician.
+2. **Divided Attention:** A single physician might attempt to juggle multiple resuscitations simultaneously without clear situational visibility.
+3. **Queue Inequity:** In acute bed shortages (e.g. ICU), human error can result in beds being allocated to later requests before earlier, more critical transfers are addressed.
+4. **Data Tampering:** Paper charts and editable digital logs can be altered retrospectively, violating medical accountability standards.
 
 ---
 
 ## 2. Technical Architecture & Component Responsibilities
-- **Frontend (React 19 + Vite + Tailwind CSS):** Handles presentation, role-guarded views, responsive UI components, client-side input validation, Recharts trend graphs, and reactive state management.
-- **Backend (Laravel 13 + Sanctum):** Implements business logic, API route endpoints, Form Request validation, authentication/authorization, transaction management, Dompdf generation, and email handling.
-- **Database (MySQL via XAMPP):** Stores relational entities (`users`, `patients`, `admissions`, `vital_records`, `alert_rules`, `alerts`, `audit_logs`). Enforces constraints such as unique active admissions and relational foreign keys.
+
+- **Frontend (React 19 + Vite + Tailwind CSS):** Role-guarded portals, responsive situational awareness displays, client-side input validation, Recharts physiological trend graphs, and cross-window real-time telemetry synchronization via HTML5 `BroadcastChannel`.
+- **Backend (Laravel 13 + Sanctum):** Business logic, REST endpoints, Form Request validation, RBAC policies, database transactions, Dompdf report generation, resilient SMTP notification dispatching, and strict FIFO queue evaluation.
+- **Database (MySQL 8 via XAMPP):** Relational storage engine (`InnoDB`) with strict foreign key constraints, row-level locks, and unique indexes to enforce single active admissions and bed occupancy.
 
 ---
 
-## 3. Key Viva Questions & Answers
+## 3. High-Yield Viva Questions & Answers
 
-### Q1: How does frontend and backend communicate?
-**Answer:** The React frontend communicates with Laravel via asynchronous HTTP requests using Axios over REST endpoints (`http://localhost:8000/api`). Requests carry the Sanctum authentication Bearer token in the `Authorization` header. Responses follow a standardized JSON format: `{ "success": boolean, "message": string, "data": ... }`.
+### Q1: How does the frontend communicate with the backend?
+**Answer:** The React SPA communicates with Laravel via asynchronous HTTP requests using Axios over REST endpoints (`http://localhost:8000/api`). Requests carry the Laravel Sanctum Bearer token in the `Authorization` header. Responses follow a standardized JSON envelope: `{ "success": boolean, "message": string, "data": ... }`.
 
-### Q2: Why is vital record history immutable?
-**Answer:** In medical and clinical software, altering or overwriting past clinical observations is a grave safety and legal hazard. VitalWatch stores every measurement as a new row in `vital_records` with a timestamp and foreign key `recorded_by` pointing to the user who entered it. Even administrators cannot silently update past measurement figures.
+### Q2: Why are clinical vital records permanently immutable?
+**Answer:** Under clinical software regulatory frameworks (e.g., FDA guidelines, HIPAA, Good Clinical Practice), modifying or erasing past physiological measurements is a severe clinical and legal violation. VitalWatch enforces this in `VitalRecordPolicy` where `update()` and `delete()` unconditionally return `false`. Every measurement is an insert-only record with staff and timestamp attribution.
 
-### Q3: How is duplicate active admission prevented?
-**Answer:** Both at the application service level and database level. The `AdmissionService` verifies inside a database transaction that no record with `patient_id = $id` and `status = 'admitted'` exists before creating a new admission. If one exists, the request is rejected with a 422 HTTP unprocessable entity response.
+### Q3: How does the Strict FIFO Priority Queue for Bed Allocations work?
+**Answer:** When physicians request Emergency ICU or Ward Step-Down transfers, requests are timestamped (`icu_transfer_requested_at`, `step_down_requested_at`). In `AdmissionService::completeIcuTransfer()` and `completeStepDown()`, the system queries for any active admission with an earlier request timestamp. If an earlier request exists, the allocation is rejected with an HTTP `422 Unprocessable Content` error naming the Priority #1 patient. On the frontend, non-priority #1 buttons are visually disabled and locked with `🔒 Awaiting Priority #1 ({patientName})`.
 
-### Q4: How does the Alert Engine evaluate vital signs?
-**Answer:** In `VitalService::store()`, after saving the new vital sign record inside a DB transaction, the `AlertService::evaluate()` method loads all active `alert_rules`. It evaluates each parameter (Heart Rate, BP, SpO2, Temp, RR) against the configured threshold using dynamic operators (`>`, `>=`, `<`, `<=`, `==`). If a threshold is crossed, it verifies that no active alert already exists for the same patient and rule, preventing alert fatigue and duplicate notifications.
+### Q4: How is physician bedside concurrency controlled?
+**Answer:** A physician cannot physically provide resuscitation to multiple patients simultaneously. In `AlertService::markDoctorInAction()`, the system checks whether the logged-in doctor already holds an active `doctor_in_action` status on another patient. If so, it blocks the action with a validation error naming their currently attended patient, ward, and bed number, requiring them to complete that assessment before attending another bedside.
 
-### Q5: What are the clinical safety limitations?
-**Answer:** VitalWatch clearly displays the notice **"DEMONSTRATION ONLY — NOT CLINICALLY VALIDATED"**. Alerts serve strictly as prompts for human clinical review. The software does not diagnose conditions, does not recommend prescription dosages, and never infers safety from absence of alerts.
+### Q5: Why is nurse vital sign entry locked after an ICU transfer?
+**Answer:** When an acutely deteriorating patient is escalated to the ICU, their immediate physiological management must be supervised and evaluated by the attending physician (MO/MD). To prevent routine nursing rounds from masking unreviewed post-transfer conditions, `VitalService::record()` rejects vital entries on newly transferred ICU patients until the attending physician marks their initial clinical assessment done (`icu_assessment_done = true`).
 
+### Q6: How does real-time cross-window synchronization work without WebSocket servers?
+**Answer:** VitalWatch implements the browser's native HTML5 `BroadcastChannel` API on channel `vitalwatch_telemetry_sync`. Whenever a vital sign is saved, an alarm is resolved, or a patient is transferred, a lightweight event is broadcasted. All open tabs and windows (Nurse Portal, Doctor Portal, Situation Monitor, Vital Trend Logs) receive this event in under 50ms and refresh their telemetry data automatically, supplemented by a 12-second periodic polling fallback.
+
+### Q7: How is bed occupancy conflict prevented?
+**Answer:** In `AdmissionService::admitPatient()`, `completeIcuTransfer()`, and `completeStepDown()`, a database query checks if any other admitted patient currently occupies the target `(ward, bed_number)` pair. If occupied, the operation is blocked with a validation error identifying the current occupant.
+
+### Q8: How are administrative audit logs managed and protected?
+**Answer:** Every mutating operation (logins, admissions, vital entries, physician actions, alarm resolutions, and transfers) is captured by `AuditService` with the actor's user ID, name, role, IP address, and payload parameters. Sensitive authentication credentials (passwords, tokens) are stripped before storage. Administrators can filter logs by calendar date range, view human-readable inspection drawers, and prune obsolete logs without affecting immutable clinical vital records.
+
+### Q9: How are duplicate titles (e.g. "Dr. Dr." or "Nurse Nurse") prevented?
+**Answer:** An Eloquent attribute mutator in the `User` model runs `cleanPersonName()`, regex-stripping any redundant leading titles before persisting or formatting names.
+
+### Q10: What are the clinical safety limitations?
+**Answer:** VitalWatch prominently features the safety disclosure **"ACADEMIC SOFTWARE PROTOTYPE — NOT CLINICALLY VALIDATED"**. Alerts serve strictly as prompts for certified human clinical review. The system does not automate medical diagnosis, does not compute drug dosages, and never infers physiological safety from the absence of alerts.
