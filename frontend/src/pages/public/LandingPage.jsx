@@ -1,39 +1,17 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth';
+import { Link } from 'react-router-dom';
 import {
   Activity,
   HeartHandshake,
   Stethoscope,
   ShieldCheck,
-  BellRing,
   CheckCircle2,
-  AlertTriangle,
   ArrowRight,
   Sparkles,
-  Mail,
-  Clock,
-  ShieldAlert,
   ChevronRight,
-  TrendingUp,
 } from 'lucide-react';
-import toast from 'react-hot-toast';
 
 export default function LandingPage() {
-  const { login } = useAuth();
-  const navigate = useNavigate();
-
-  const handleQuickLogin = async (email) => {
-    try {
-      await login({ email, password: 'password' });
-      toast.success(`Signed in as ${email}`);
-      navigate('/dashboard');
-    } catch (err) {
-      toast.error('Quick login failed. Please sign in manually.');
-      navigate('/login');
-    }
-  };
-
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
       {/* Top Navigation */}

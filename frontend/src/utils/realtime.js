@@ -20,7 +20,7 @@ export function broadcastTelemetryUpdate() {
     if (channel) {
       channel.postMessage({ type: 'TELEMETRY_UPDATED', timestamp: Date.now() });
     }
-  } catch (err) {
+  } catch {
     // Graceful fallback
   }
 

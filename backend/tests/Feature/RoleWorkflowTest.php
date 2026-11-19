@@ -2,11 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Models\Admission;
 use App\Models\Alert;
 use App\Models\AlertRule;
 use App\Models\Patient;
-use App\Models\User;
 use Tests\TestCase;
 
 class RoleWorkflowTest extends TestCase

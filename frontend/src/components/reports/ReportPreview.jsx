@@ -19,7 +19,6 @@ import {
   ClipboardList,
   AlertTriangle,
   FileText,
-  CheckCircle2,
   Clock,
   Heart,
   Thermometer,
@@ -27,8 +26,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Info,
-  Calendar,
-  User,
   Stethoscope,
 } from 'lucide-react';
 

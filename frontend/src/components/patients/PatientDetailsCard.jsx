@@ -1,7 +1,7 @@
 import React from 'react';
 import StatusBadge from '../common/StatusBadge';
 import { calculateAge, formatDate, formatDateTime } from '../../utils/formatDate';
-import { User, Bed, Phone, MapPin, Calendar, Activity } from 'lucide-react';
+import { Bed, Phone, MapPin, Calendar, Activity } from 'lucide-react';
 import Button from '../common/Button';
 
 export default function PatientDetailsCard({

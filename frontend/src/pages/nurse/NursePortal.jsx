@@ -15,7 +15,6 @@ import {
   Info,
   UserPlus,
   Bed,
-  Users,
 } from 'lucide-react';
 import { WARDS, WARD_BEDS } from '../../utils/constants';
 import { onTelemetryUpdate, broadcastTelemetryUpdate } from '../../utils/realtime';
@@ -24,9 +23,7 @@ import toast from 'react-hot-toast';
 export default function NursePortal() {
   const { user } = useAuth();
   const [patients, setPatients] = useState([]);
-  const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
 
   // New Patient & Admission Modal state
   const [registerModalOpen, setRegisterModalOpen] = useState(false);
@@ -77,23 +74,16 @@ export default function NursePortal() {
 
   const loadData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
-    else setRefreshing(true);
 
     try {
-      const [patientsRes, summaryRes] = await Promise.all([
-        dashboardService.getMonitoringPatients(),
-        dashboardService.getSummary(),
-      ]);
-
+      const patientsRes = await dashboardService.getMonitoringPatients();
       setPatients(patientsRes.data?.data || []);
-      setSummary(summaryRes.data || null);
     } catch {
       if (!isSilent) {
         toast.error('Failed to load bedside situation telemetry.');
       }
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, []);
 
@@ -163,7 +153,6 @@ export default function NursePortal() {
   const stableCount = patients.filter((p) => p.situation_status === 'stable').length;
   const emergencyCount = patients.filter((p) => p.situation_status === 'emergency').length;
   const doctorInActionCount = patients.filter((p) => p.situation_status === 'doctor_in_action').length;
-  const attentionCount = patients.filter((p) => p.situation_status === 'review').length;
 
   return (
     <PageContainer>

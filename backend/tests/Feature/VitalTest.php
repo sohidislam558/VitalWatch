@@ -2,9 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\Admission;
-use App\Models\Patient;
-use App\Models\User;
 use Tests\TestCase;
 
 class VitalTest extends TestCase

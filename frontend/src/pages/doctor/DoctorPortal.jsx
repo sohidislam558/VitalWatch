@@ -13,7 +13,6 @@ import {
   Stethoscope,
   CheckCircle2,
   HeartPulse,
-  AlertTriangle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -24,13 +23,11 @@ export default function DoctorPortal() {
   const [patients, setPatients] = useState([]);
   const [activeAlerts, setActiveAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [assessmentSubmitting, setAssessmentSubmitting] = useState(false);
   const [icuTransferSubmitting, setIcuTransferSubmitting] = useState(false);
 
   const loadData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
-    else setRefreshing(true);
 
     try {
       const [patientsRes, alertsRes] = await Promise.all([
@@ -46,7 +43,6 @@ export default function DoctorPortal() {
       }
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, []);
 
@@ -129,11 +125,6 @@ export default function DoctorPortal() {
       setIcuTransferSubmitting(false);
     }
   };
-
-  // Count distinct patients with active emergency alarms
-  const emergencyPatientCount = new Set(
-    activeAlerts.filter((a) => a.status === 'active').map((a) => a.patient_id)
-  ).size;
 
   return (
     <PageContainer>

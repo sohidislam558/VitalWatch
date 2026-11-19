@@ -14,7 +14,7 @@ import ConfirmDialog from '../../components/common/ConfirmDialog';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
 import Button from '../../components/common/Button';
-import { Bed, Plus, Eye, LogOut } from 'lucide-react';
+import { Plus, Eye } from 'lucide-react';
 import { formatDateTime } from '../../utils/formatDate';
 import toast from 'react-hot-toast';
 

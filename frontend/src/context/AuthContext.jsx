@@ -22,7 +22,7 @@ export function AuthProvider({ children }) {
           setUser(response.data.user);
           sessionStorage.setItem('vitalwatch_user', JSON.stringify(response.data.user));
         }
-      } catch (err) {
+      } catch {
         setUser(null);
         sessionStorage.removeItem('vitalwatch_token');
         sessionStorage.removeItem('vitalwatch_user');

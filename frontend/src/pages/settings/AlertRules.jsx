@@ -11,7 +11,7 @@ import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { Sliders, Plus, Edit, ShieldAlert } from 'lucide-react';
+import { Plus, Edit } from 'lucide-react';
 import HospitalGovernanceNav from '../../components/admin/HospitalGovernanceNav';
 import toast from 'react-hot-toast';
 

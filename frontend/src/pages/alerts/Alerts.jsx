@@ -8,7 +8,7 @@ import AlertTable from '../../components/alerts/AlertTable';
 import AlertAcknowledgeModal from '../../components/alerts/AlertAcknowledgeModal';
 import Pagination from '../../components/common/Pagination';
 import Button from '../../components/common/Button';
-import { RefreshCw, Filter } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function Alerts() {

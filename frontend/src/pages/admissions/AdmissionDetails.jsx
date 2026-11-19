@@ -7,7 +7,7 @@ import StatusBadge from '../../components/common/StatusBadge';
 import VitalHistoryTable from '../../components/vitals/VitalHistoryTable';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { formatDateTime } from '../../utils/formatDate';
-import { Bed, Calendar, User, Activity } from 'lucide-react';
+import { Bed } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function AdmissionDetails() {

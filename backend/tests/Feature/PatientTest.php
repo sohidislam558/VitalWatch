@@ -2,8 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\Patient;
-use App\Models\User;
 use Tests\TestCase;
 
 class PatientTest extends TestCase

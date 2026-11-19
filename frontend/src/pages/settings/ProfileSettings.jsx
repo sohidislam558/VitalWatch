@@ -3,7 +3,7 @@ import { useAuth } from '../../hooks/useAuth';
 import PageContainer from '../../components/layout/PageContainer';
 import PageHeader from '../../components/common/PageHeader';
 import StatusBadge from '../../components/common/StatusBadge';
-import { User, Shield, Mail, Calendar, Key } from 'lucide-react';
+import { Shield, Mail, Calendar, Key } from 'lucide-react';
 import { formatDateTime } from '../../utils/formatDate';
 import { ROLE_LABELS } from '../../utils/constants';
 

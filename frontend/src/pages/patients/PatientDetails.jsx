@@ -16,7 +16,7 @@ import Modal from '../../components/common/Modal';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import Button from '../../components/common/Button';
-import { PlusCircle, FileText, Download, Bed, History, AlertTriangle, Trash2 } from 'lucide-react';
+import { PlusCircle, Download, Bed, Trash2 } from 'lucide-react';
 import { formatDateTime } from '../../utils/formatDate';
 import StatusBadge from '../../components/common/StatusBadge';
 import toast from 'react-hot-toast';

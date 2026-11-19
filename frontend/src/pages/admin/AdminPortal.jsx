@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { dashboardService } from '../../services/settingsService';
 import { useAuth } from '../../hooks/useAuth';
 import PageContainer from '../../components/layout/PageContainer';
@@ -11,30 +11,21 @@ import UsersPage from '../users/Users';
 import AlertRulesPage from '../settings/AlertRules';
 import PatientsPage from '../patients/Patients';
 import ReportsPage from '../reports/Reports';
-import { cleanPersonName, formatDoctorName, formatNurseName } from '../../utils/formatUser';
+import { cleanPersonName, formatDoctorName } from '../../utils/formatUser';
 import { onTelemetryUpdate } from '../../utils/realtime';
 import {
   ShieldCheck,
   Activity,
   HeartHandshake,
   Stethoscope,
-  Users,
   Bed,
-  Sliders,
-  FileText,
   AlertTriangle,
   Clock,
   CheckCircle2,
-  ChevronRight,
-  ShieldAlert,
   Calendar,
   Search,
-  ArrowRight,
-  Filter,
   X,
   Eye,
-  User,
-  ExternalLink,
   Sparkles,
   Trash2,
 } from 'lucide-react';
@@ -64,7 +55,6 @@ export default function AdminPortal() {
   const [summary, setSummary] = useState(null);
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
 
   // Tab switch between Activity Stream and Situation Monitor
   const [activeTab, setActiveTab] = useState('activity'); // 'activity' or 'monitor'
@@ -91,7 +81,6 @@ export default function AdminPortal() {
 
   const loadData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
-    else setRefreshing(true);
 
     try {
       const [patientsRes, summaryRes, activitiesRes] = await Promise.all([
@@ -110,7 +99,6 @@ export default function AdminPortal() {
       toast.error('Failed to load administrator telemetry.');
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, [activityStartDate, activityEndDate]);
 
@@ -169,7 +157,7 @@ export default function AdminPortal() {
       setDeleteConfirm({
         isOpen: true,
         type: 'all',
-        title: 'Purge ALL Activity Logs',
+        title: 'Clear ALL Activity Logs',
         message: `Permanent Deletion Warning: Are you sure you want to permanently delete ALL ${activities.length} activity log events in the hospital system? This will clear the entire audit trail and cannot be undone.`,
       });
     }
@@ -415,204 +403,6 @@ export default function AdminPortal() {
   };
 
   const groupedActivities = groupActivitiesByDate(filteredActivities);
-
-  // Render clean human-readable details without raw JSON stringification
-  const renderActivityDetails = (item) => {
-    const details = item.details;
-    if (!details || typeof details !== 'object' || Object.keys(details).length === 0) {
-      return null;
-    }
-
-    // 1. Bedside Vital Signs Recording
-    if (item.action === 'RECORD_VITALS') {
-      return (
-        <div className="flex flex-wrap items-center gap-1.5 mt-2 text-[11px]">
-          {details.heart_rate != null && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 font-semibold border border-rose-100">
-              <span>❤️ HR: {details.heart_rate} bpm</span>
-            </span>
-          )}
-          {details.systolic_bp != null && details.diastolic_bp != null && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-semibold border border-indigo-100">
-              <span>🩸 BP: {details.systolic_bp}/{details.diastolic_bp} mmHg</span>
-            </span>
-          )}
-          {details.spo2 != null && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-50 text-cyan-700 font-semibold border border-cyan-100">
-              <span>🫁 SpO2: {details.spo2}%</span>
-            </span>
-          )}
-          {details.temperature != null && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 font-semibold border border-amber-100">
-              <span>🌡️ Temp: {details.temperature}°C</span>
-            </span>
-          )}
-          {details.respiratory_rate != null && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-semibold border border-emerald-100">
-              <span>🌬️ RR: {details.respiratory_rate}/min</span>
-            </span>
-          )}
-          {details.clinical_notes && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 italic border border-slate-200">
-              <span>📝 Note: "{details.clinical_notes}"</span>
-            </span>
-          )}
-        </div>
-      );
-    }
-
-    // 2. Emergency ICU Transfer Requested
-    if (item.action === 'EMERGENCY_ICU_TRANSFER_REQUESTED') {
-      return (
-        <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px]">
-          <span className="px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 font-bold border border-rose-200">
-            🚨 Target: {details.target_ward || 'ICU'}
-          </span>
-          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-medium">
-            From: {details.current_ward} • Bed {details.current_bed}
-          </span>
-          <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-medium">
-            {formatDoctorName(details.requester_name || item.user_name)}
-          </span>
-          {details.notes && (
-            <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 italic border border-amber-200">
-              "{details.notes}"
-            </span>
-          )}
-        </div>
-      );
-    }
-
-    // 3. Patient Transferred to ICU
-    if (item.action === 'PATIENT_TRANSFERRED_TO_ICU') {
-      return (
-        <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px]">
-          <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 font-bold border border-indigo-200">
-            🚑 Transferred to ICU
-          </span>
-          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-medium">
-            {details.from_ward} ({details.from_bed}) ➔ {details.to_ward} ({details.to_bed})
-          </span>
-          <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-medium">
-            Completed by: {details.transferred_by || item.user_name}
-          </span>
-        </div>
-      );
-    }
-
-    // 4. Ward Step-Down Requested
-    if (item.action === 'STEP_DOWN_REQUESTED') {
-      return (
-        <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px]">
-          <span className="px-2 py-0.5 rounded-md bg-teal-100 text-teal-800 font-bold border border-teal-200">
-            🏥 Target: {details.target_ward || 'General Medical Ward'}
-          </span>
-          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-medium">
-            Current: {details.current_ward} • Bed {details.current_bed}
-          </span>
-          <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-medium">
-            {formatDoctorName(details.requester_name || item.user_name)}
-          </span>
-          {details.notes && (
-            <span className="px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 italic border border-teal-200">
-              "{details.notes}"
-            </span>
-          )}
-        </div>
-      );
-    }
-
-    // 5. Patient Stepped Down to General Ward
-    if (item.action === 'PATIENT_STEPPED_DOWN') {
-      return (
-        <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px]">
-          <span className="px-2 py-0.5 rounded-md bg-teal-100 text-teal-800 font-bold border border-teal-200">
-            🏥 Stepped Down to General Ward
-          </span>
-          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-medium">
-            {details.from_ward} ({details.from_bed}) ➔ {details.to_ward} ({details.to_bed})
-          </span>
-          <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-medium">
-            Allocated by: {details.transferred_by || item.user_name}
-          </span>
-        </div>
-      );
-    }
-
-    // 6. Doctor in Action
-    if (item.action === 'DOCTOR_IN_ACTION') {
-      return (
-        <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px]">
-          <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 font-bold">
-            🩺 Bedside Attendance: {formatDoctorName(item.user_name)}
-          </span>
-          {details.message && (
-            <span className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 font-medium border border-rose-100">
-              🚨 {details.message}
-            </span>
-          )}
-          {details.notes && (
-            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 italic border border-slate-200">
-              "{details.notes}"
-            </span>
-          )}
-        </div>
-      );
-    }
-
-    // 7. Alert Resolved or Auto Resolved
-    if (item.action.startsWith('ALERT_RESOLVED') || item.action.startsWith('ALERT_AUTO_RESOLVED')) {
-      return (
-        <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px]">
-          <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-semibold border border-emerald-200">
-            ✅ Alarm Resolved
-          </span>
-          {details.rule && (
-            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
-              Rule: {details.rule}
-            </span>
-          )}
-        </div>
-      );
-    }
-
-    // 8. Patient Admitted
-    if (item.action === 'PATIENT_ADMITTED') {
-      return (
-        <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px]">
-          <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-medium border border-blue-100">
-            Ward: {details.ward} • Bed {details.bed_number}
-          </span>
-          {details.diagnosis && (
-            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
-              Diagnosis: {details.diagnosis}
-            </span>
-          )}
-        </div>
-      );
-    }
-
-    // 9. Generic clean key-value tags (No raw JSON dump!)
-    const ignoredKeys = ['patient_id', 'requester_id', 'actor_id', 'user_id', 'id'];
-    const entries = Object.entries(details).filter(
-      ([k, v]) => !ignoredKeys.includes(k) && v !== null && v !== undefined && typeof v !== 'object'
-    );
-
-    if (entries.length === 0) return null;
-
-    return (
-      <div className="flex flex-wrap items-center gap-1.5 mt-2 text-[11px]">
-        {entries.map(([key, val]) => (
-          <span
-            key={key}
-            className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-medium border border-slate-200"
-          >
-            <span className="font-semibold text-slate-700 capitalize">{key.replace(/_/g, ' ')}:</span> {String(val)}
-          </span>
-        ))}
-      </div>
-    );
-  };
 
   return (
     <PageContainer>
@@ -1371,7 +1161,7 @@ export default function AdminPortal() {
         onConfirm={handleConfirmDelete}
         title={deleteConfirm.title}
         message={deleteConfirm.message}
-        confirmText={deleteConfirm.type === 'all' ? 'Purge All Logs' : 'Delete'}
+        confirmText={deleteConfirm.type === 'all' ? 'Clear All Logs' : 'Delete'}
         cancelText="Cancel"
         variant="danger"
         loading={deleteLoading}

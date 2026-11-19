@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
@@ -14,7 +14,6 @@ export default function HospitalGovernanceNav({
   onSelectSection,
 }) {
   const navigate = useNavigate();
-  const location = useLocation();
 
   // Exactly matches sidebar order (top to bottom) and titles
   const navItems = [

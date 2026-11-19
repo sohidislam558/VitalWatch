@@ -9,7 +9,7 @@ import Button from '../../components/common/Button';
 import SearchInput from '../../components/common/SearchInput';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
-import { UserPlus, Edit, ShieldCheck, RefreshCw } from 'lucide-react';
+import { UserPlus, Edit, RefreshCw } from 'lucide-react';
 import { formatDateTime } from '../../utils/formatDate';
 import HospitalGovernanceNav from '../../components/admin/HospitalGovernanceNav';
 import toast from 'react-hot-toast';

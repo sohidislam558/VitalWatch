@@ -6,7 +6,7 @@ import PageHeader from '../../components/common/PageHeader';
 import StatusBadge from '../../components/common/StatusBadge';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { formatDateTime } from '../../utils/formatDate';
-import { AlertTriangle, Clock, User, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, Clock, User } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function AlertDetails() {

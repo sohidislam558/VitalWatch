@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\Patient;
 use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
-use Illuminate\Http\Response;
 
 class ReportService
 {

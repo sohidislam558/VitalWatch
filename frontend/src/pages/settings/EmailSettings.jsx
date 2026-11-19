@@ -1,7 +1,7 @@
 import React from 'react';
 import PageContainer from '../../components/layout/PageContainer';
 import PageHeader from '../../components/common/PageHeader';
-import { Mail, CheckCircle2, ShieldCheck, Terminal } from 'lucide-react';
+import { Mail, CheckCircle2, Terminal } from 'lucide-react';
 
 export default function EmailSettings() {
   return (

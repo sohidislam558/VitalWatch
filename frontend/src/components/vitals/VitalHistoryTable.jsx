@@ -6,7 +6,7 @@ import { formatStaffName } from '../../utils/formatUser';
 import EmptyState from '../common/EmptyState';
 import { AlertTriangle, User } from 'lucide-react';
 
-export default function VitalHistoryTable({ vitals = [], loading = false, showPatient = true }) {
+export default function VitalHistoryTable({ vitals = [], showPatient = true }) {
   if (vitals.length === 0) {
     return <EmptyState title="No vital measurements recorded" description="Start by adding the patient's first vital signs observation." />;
   }

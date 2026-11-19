@@ -13,7 +13,6 @@ import {
   Eye,
   EyeOff,
   ShieldAlert,
-  BadgeAlert,
   Info,
 } from 'lucide-react';
 import Input from '../../components/common/Input';

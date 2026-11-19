@@ -19,13 +19,10 @@ import {
   PlusCircle,
   Eye,
   TrendingUp,
-  X,
-  FileText,
   Search,
   Ban,
 } from 'lucide-react';
 import Button from '../common/Button';
-import Input from '../common/Input';
 import Textarea from '../common/Textarea';
 import Modal from '../common/Modal';
 import { formatDoctorName, formatNurseName } from '../../utils/formatUser';

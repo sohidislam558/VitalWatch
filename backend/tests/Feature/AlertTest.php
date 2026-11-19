@@ -3,8 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Alert;
-use App\Models\Patient;
-use App\Models\User;
 use Tests\TestCase;
 
 class AlertTest extends TestCase
