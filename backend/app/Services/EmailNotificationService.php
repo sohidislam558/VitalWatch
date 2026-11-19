@@ -17,41 +17,59 @@ class EmailNotificationService
      * Dispatch alert notification emails to doctors and admins.
      * Guaranteed never to crash the caller, hang the HTTP request, or abort transactions on SMTP failure.
      */
+    /**
+     * Dispatch alert notification emails to doctors and admins.
+     * Guaranteed never to crash the caller, hang the HTTP request, or abort transactions on SMTP failure.
+     */
     public function sendAlertNotification(Alert $alert): void
     {
         // Eager load relations
         $alert->loadMissing(['patient', 'vitalRecord.admission', 'alertRule']);
 
         // Determine recipients: all active doctors and admins
-        $recipients = User::where('status', 'active')
+        $allRecipients = User::where('status', 'active')
             ->whereIn('role', ['admin', 'doctor'])
             ->pluck('email')
             ->filter()
             ->unique();
 
-        if ($recipients->isEmpty()) {
+        if ($allRecipients->isEmpty()) {
             return;
         }
 
-        $subject = "[VitalWatch " . strtoupper($alert->priority) . "] Clinical Review Notification for " . ($alert->patient->patient_code ?? 'Patient');
-
         $mailer = config('mail.default');
-        $smtpActive = false;
+        $smtpHost = config('mail.mailers.smtp.host');
+        $isLocalHost = in_array($smtpHost, ['127.0.0.1', 'localhost', null], true);
+        $canSendLive = ($mailer === 'smtp' && !$isLocalHost) || ($mailer !== 'smtp');
 
-        if ($mailer === 'smtp') {
-            $host = config('mail.mailers.smtp.host');
-            $port = (int) (config('mail.mailers.smtp.port') ?: 587);
+        // Filter out dummy/unresolvable test domains for live SMTP delivery
+        $liveRecipients = $allRecipients->filter(function ($email) {
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                return false;
+            }
+            $domain = strtolower(substr(strrchr($email, "@"), 1));
+            return !in_array($domain, ['vitalwatch.hospital', 'hospital.local', 'example.com', 'test.com'], true);
+        });
 
-            // Fast health check: if SMTP host is not responding within 0.8s, fallback safely
-            $socket = @fsockopen($host, $port, $errno, $errstr, 0.8);
+        // Ensure active doctors with valid emails receive priority
+        $recipients = $liveRecipients->isNotEmpty() ? $liveRecipients : $allRecipients;
+
+        $patientName = $alert->patient?->name ?? 'Patient';
+        $patientCode = $alert->patient?->patient_code ?? 'MRN';
+        $priorityUpper = strtoupper($alert->priority);
+        $subject = "[VitalWatch {$priorityUpper}] Emergency Alert for {$patientName} ({$patientCode})";
+
+        // If configured for local 127.0.0.1, do a quick socket check to avoid hanging if no local mailpit is up
+        $smtpActive = true;
+        if ($mailer === 'smtp' && $isLocalHost) {
+            $port = (int) (config('mail.mailers.smtp.port') ?: 1025);
+            $socket = @fsockopen($smtpHost, $port, $errno, $errstr, 0.5);
             if ($socket) {
                 fclose($socket);
                 $smtpActive = true;
             } else {
-                Log::info("SMTP server {$host}:{$port} not responding within 0.8s. Email dispatch recorded to database/log.");
+                $smtpActive = false;
             }
-        } else {
-            $smtpActive = true;
         }
 
         foreach ($recipients as $recipientEmail) {
@@ -64,18 +82,19 @@ class EmailNotificationService
             ]);
 
             try {
-                if ($smtpActive) {
+                if ($canSendLive && $smtpActive) {
                     Mail::to($recipientEmail)->send(new PatientAlertMail($alert));
                     $emailLog->update([
                         'status' => 'sent',
                         'sent_at' => now(),
+                        'error_message' => null,
                     ]);
                 } else {
-                    // Safe simulated delivery when SMTP host is offline
+                    // Safe simulated delivery when SMTP host is offline or local placeholder
                     $emailLog->update([
                         'status' => 'sent',
                         'sent_at' => now(),
-                        'error_message' => 'Simulated delivery logged (SMTP offline in local environment).',
+                        'error_message' => 'Simulated delivery logged (SMTP in local simulation mode).',
                     ]);
                 }
             } catch (Throwable $e) {
@@ -96,33 +115,80 @@ class EmailNotificationService
     {
         $admission->loadMissing(['patient']);
 
-        $recipients = User::where('status', 'active')
+        $allRecipients = User::where('status', 'active')
             ->whereIn('role', ['admin', 'doctor', 'nurse'])
             ->pluck('email')
             ->filter()
             ->unique();
 
-        if ($recipients->isEmpty()) {
+        if ($allRecipients->isEmpty()) {
             return;
         }
+
+        $mailer = config('mail.default');
+        $smtpHost = config('mail.mailers.smtp.host');
+        $isLocalHost = in_array($smtpHost, ['127.0.0.1', 'localhost', null], true);
+        $canSendLive = ($mailer === 'smtp' && !$isLocalHost) || ($mailer !== 'smtp');
+
+        $liveRecipients = $allRecipients->filter(function ($email) {
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return false;
+            $domain = strtolower(substr(strrchr($email, "@"), 1));
+            return !in_array($domain, ['vitalwatch.hospital', 'hospital.local', 'example.com', 'test.com'], true);
+        });
+
+        $recipients = $liveRecipients->isNotEmpty() ? $liveRecipients : $allRecipients;
 
         $patientName = $admission->patient?->name ?? 'Patient';
         $patientCode = $admission->patient?->patient_code ?? 'MRN';
         $ward = $admission->ward;
         $bed = $admission->bed_number;
         $targetWard = $admission->target_icu_ward ?: 'Intensive Care Unit (ICU)';
-        $subject = "[VitalWatch EMERGENCY] Immediate ICU Transfer Requested: {$patientName} ({$patientCode}) - Bed {$bed}, {$ward}";
+        $doctorName = \App\Models\User::formatDoctorName($requester->name);
+        $subject = "[VitalWatch EMERGENCY] Immediate ICU Transfer Requested: {$patientName} ({$patientCode}) - {$ward} Bed {$bed}";
+
+        $emailBody = "🚨 VITALWATCH EMERGENCY ICU ESCALATION DISPATCH 🚨\n\n" .
+            "Immediate ICU transfer has been requested by {$doctorName}.\n\n" .
+            "Patient Name: {$patientName}\n" .
+            "Patient Code: {$patientCode}\n" .
+            "Current Location: {$ward} (Bed {$bed})\n" .
+            "Target Ward: {$targetWard}\n" .
+            "Physician Notes: " . ($admission->icu_transfer_notes ?: 'Patient deteriorating; urgent ICU bed required.') . "\n" .
+            "Timestamp: " . now()->format('Y-m-d H:i:s') . "\n\n" .
+            "ACTION REQUIRED: Registered nurses and administrators should navigate to the VitalWatch Situation Monitor to allocate an available ICU bed according to the Priority #1 queue strictly.";
 
         foreach ($recipients as $recipientEmail) {
-            EmailLog::create([
+            $emailLog = EmailLog::create([
                 'alert_id' => null,
                 'recipient_email' => $recipientEmail,
                 'subject' => $subject,
-                'status' => 'sent',
-                'sent_at' => now(),
+                'status' => 'pending',
                 'created_at' => now(),
-                'error_message' => "Emergency ICU transfer requested by " . \App\Models\User::formatDoctorName($requester->name) . " to {$targetWard}.",
             ]);
+
+            try {
+                if ($canSendLive) {
+                    Mail::raw($emailBody, function ($msg) use ($recipientEmail, $subject) {
+                        $msg->to($recipientEmail)->subject($subject);
+                    });
+                    $emailLog->update([
+                        'status' => 'sent',
+                        'sent_at' => now(),
+                        'error_message' => "Live emergency dispatch sent to {$recipientEmail}.",
+                    ]);
+                } else {
+                    $emailLog->update([
+                        'status' => 'sent',
+                        'sent_at' => now(),
+                        'error_message' => "Emergency ICU transfer requested by {$doctorName} to {$targetWard} (Simulated).",
+                    ]);
+                }
+            } catch (Throwable $e) {
+                Log::warning("ICU transfer email notification failed for {$recipientEmail}: " . $e->getMessage());
+                $emailLog->update([
+                    'status' => 'failed',
+                    'error_message' => $e->getMessage(),
+                ]);
+            }
         }
     }
 }

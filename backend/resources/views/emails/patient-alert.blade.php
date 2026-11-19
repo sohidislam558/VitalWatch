@@ -34,16 +34,20 @@
 
             <table class="meta-table">
                 <tr>
+                    <td class="label">Patient Name:</td>
+                    <td><strong>{{ $alert->patient?->name ?? 'Inpatient' }}</strong></td>
+                </tr>
+                <tr>
                     <td class="label">Patient Code:</td>
-                    <td><strong>{{ $alert->patient->patient_code }}</strong></td>
+                    <td><strong>{{ $alert->patient?->patient_code ?? 'N/A' }}</strong></td>
                 </tr>
                 <tr>
                     <td class="label">Ward & Bed:</td>
-                    <td>{{ $alert->vitalRecord?->admission?->ward ?? 'General' }} — Bed {{ $alert->vitalRecord?->admission?->bed_number ?? 'N/A' }}</td>
+                    <td>{{ $alert->vitalRecord?->admission?->ward ?? 'General Ward' }} — Bed {{ $alert->vitalRecord?->admission?->bed_number ?? 'N/A' }}</td>
                 </tr>
                 <tr>
                     <td class="label">Triggered Parameter:</td>
-                    <td>{{ ucwords(str_replace('_', ' ', $alert->alertRule->parameter ?? 'Vital Sign')) }}</td>
+                    <td>{{ ucwords(str_replace('_', ' ', $alert->alertRule?->parameter ?? 'Vital Sign')) }}</td>
                 </tr>
                 <tr>
                     <td class="label">Measurement Time:</td>
