@@ -2,31 +2,29 @@
 
 namespace App\Services;
 
-use App\Mail\PatientAlertMail;
+use App\Jobs\SendAlertNotificationJob;
+use App\Jobs\SendIcuTransferNotificationJob;
 use App\Models\Admission;
 use App\Models\Alert;
-use App\Models\EmailLog;
 use App\Models\User;
+use App\Models\VitalRecord;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Throwable;
 
 class EmailNotificationService
 {
     /**
-     * Dispatch alert notification emails to doctors and admins.
-     * Guaranteed never to crash the caller, hang the HTTP request, or abort transactions on SMTP failure.
+     * Dispatch consolidated alert notification for a set of triggered alerts.
+     * Guaranteed non-blocking: never hangs HTTP requests, never aborts DB transactions.
      */
-    /**
-     * Dispatch alert notification emails to doctors and admins.
-     * Guaranteed never to crash the caller, hang the HTTP request, or abort transactions on SMTP failure.
-     */
-    public function sendAlertNotification(Alert $alert): void
+    public function sendBatchAlertNotification($alerts, ?VitalRecord $vitalRecord = null): void
     {
-        // Eager load relations
-        $alert->loadMissing(['patient', 'vitalRecord.admission', 'alertRule']);
+        $alertCollection = $alerts instanceof Collection ? $alerts : collect($alerts);
+        if ($alertCollection->isEmpty()) {
+            return;
+        }
 
-        // Determine recipients: all active doctors and admins
         $allRecipients = User::where('status', 'active')
             ->whereIn('role', ['admin', 'doctor'])
             ->pluck('email')
@@ -37,75 +35,37 @@ class EmailNotificationService
             return;
         }
 
-        $mailer = config('mail.default');
-        $smtpHost = config('mail.mailers.smtp.host');
-        $isLocalHost = in_array($smtpHost, ['127.0.0.1', 'localhost', null], true);
-        $canSendLive = ($mailer === 'smtp' && !$isLocalHost) || ($mailer !== 'smtp');
-
         // Filter out dummy/unresolvable test domains for live SMTP delivery
         $liveRecipients = $allRecipients->filter(function ($email) {
-            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                return false;
-            }
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return false;
             $domain = strtolower(substr(strrchr($email, "@"), 1));
             return !in_array($domain, ['vitalwatch.hospital', 'hospital.local', 'example.com', 'test.com'], true);
         });
 
-        // Ensure active doctors with valid emails receive priority
         $recipients = $liveRecipients->isNotEmpty() ? $liveRecipients : $allRecipients;
+        $recipientEmails = $recipients->values()->toArray();
+        $alertIds = $alertCollection->pluck('id')->toArray();
+        $vitalRecordId = $vitalRecord?->id;
 
-        $patientName = $alert->patient?->name ?? 'Patient';
-        $patientCode = $alert->patient?->patient_code ?? 'MRN';
-        $priorityUpper = strtoupper($alert->priority);
-        $subject = "[VitalWatch {$priorityUpper}] Emergency Alert for {$patientName} ({$patientCode})";
-
-        // If configured for local 127.0.0.1, do a quick socket check to avoid hanging if no local mailpit is up
-        $smtpActive = true;
-        if ($mailer === 'smtp' && $isLocalHost) {
-            $port = (int) (config('mail.mailers.smtp.port') ?: 1025);
-            $socket = @fsockopen($smtpHost, $port, $errno, $errstr, 0.5);
-            if ($socket) {
-                fclose($socket);
-                $smtpActive = true;
-            } else {
-                $smtpActive = false;
-            }
+        // If running in unit tests, execute directly without background process
+        if (app()->runningUnitTests()) {
+            (new SendAlertNotificationJob($alertIds, $vitalRecordId, $recipientEmails))->handle();
+            return;
         }
 
-        foreach ($recipients as $recipientEmail) {
-            $emailLog = EmailLog::create([
-                'alert_id' => $alert->id,
-                'recipient_email' => $recipientEmail,
-                'subject' => $subject,
-                'status' => 'pending',
-                'created_at' => now(),
-            ]);
+        // Dispatch queued job
+        SendAlertNotificationJob::dispatch($alertIds, $vitalRecordId, $recipientEmails);
 
-            try {
-                if ($canSendLive && $smtpActive) {
-                    Mail::to($recipientEmail)->send(new PatientAlertMail($alert));
-                    $emailLog->update([
-                        'status' => 'sent',
-                        'sent_at' => now(),
-                        'error_message' => null,
-                    ]);
-                } else {
-                    // Safe simulated delivery when SMTP host is offline or local placeholder
-                    $emailLog->update([
-                        'status' => 'sent',
-                        'sent_at' => now(),
-                        'error_message' => 'Simulated delivery logged (SMTP in local simulation mode).',
-                    ]);
-                }
-            } catch (Throwable $e) {
-                Log::warning("Email notification delivery failed for {$recipientEmail}: " . $e->getMessage());
+        // Ensure background worker process runs to execute the job immediately
+        static::triggerBackgroundQueueWorker();
+    }
 
-                $emailLog->update([
-                    'status' => 'failed',
-                    'error_message' => $e->getMessage(),
-                ]);
-            }
-        }
+    /**
+     * Dispatch alert notification for a single alert.
+     */
+    public function sendAlertNotification(Alert $alert): void
+    {
+        $this->sendBatchAlertNotification(collect([$alert]), $alert->vitalRecord);
     }
 
     /**
@@ -125,11 +85,6 @@ class EmailNotificationService
             return;
         }
 
-        $mailer = config('mail.default');
-        $smtpHost = config('mail.mailers.smtp.host');
-        $isLocalHost = in_array($smtpHost, ['127.0.0.1', 'localhost', null], true);
-        $canSendLive = ($mailer === 'smtp' && !$isLocalHost) || ($mailer !== 'smtp');
-
         $liveRecipients = $allRecipients->filter(function ($email) {
             if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return false;
             $domain = strtolower(substr(strrchr($email, "@"), 1));
@@ -137,58 +92,35 @@ class EmailNotificationService
         });
 
         $recipients = $liveRecipients->isNotEmpty() ? $liveRecipients : $allRecipients;
+        $recipientEmails = $recipients->values()->toArray();
 
-        $patientName = $admission->patient?->name ?? 'Patient';
-        $patientCode = $admission->patient?->patient_code ?? 'MRN';
-        $ward = $admission->ward;
-        $bed = $admission->bed_number;
-        $targetWard = $admission->target_icu_ward ?: 'Intensive Care Unit (ICU)';
-        $doctorName = \App\Models\User::formatDoctorName($requester->name);
-        $subject = "[VitalWatch EMERGENCY] Immediate ICU Transfer Requested: {$patientName} ({$patientCode}) - {$ward} Bed {$bed}";
+        // If running in unit tests, execute directly
+        if (app()->runningUnitTests()) {
+            (new SendIcuTransferNotificationJob($admission->id, $requester->id, $recipientEmails))->handle();
+            return;
+        }
 
-        $emailBody = "🚨 VITALWATCH EMERGENCY ICU ESCALATION DISPATCH 🚨\n\n" .
-            "Immediate ICU transfer has been requested by {$doctorName}.\n\n" .
-            "Patient Name: {$patientName}\n" .
-            "Patient Code: {$patientCode}\n" .
-            "Current Location: {$ward} (Bed {$bed})\n" .
-            "Target Ward: {$targetWard}\n" .
-            "Physician Notes: " . ($admission->icu_transfer_notes ?: 'Patient deteriorating; urgent ICU bed required.') . "\n" .
-            "Timestamp: " . now()->format('Y-m-d H:i:s') . "\n\n" .
-            "ACTION REQUIRED: Registered nurses and administrators should navigate to the VitalWatch Situation Monitor to allocate an available ICU bed according to the Priority #1 queue strictly.";
+        SendIcuTransferNotificationJob::dispatch($admission->id, $requester->id, $recipientEmails);
+        static::triggerBackgroundQueueWorker();
+    }
 
-        foreach ($recipients as $recipientEmail) {
-            $emailLog = EmailLog::create([
-                'alert_id' => null,
-                'recipient_email' => $recipientEmail,
-                'subject' => $subject,
-                'status' => 'pending',
-                'created_at' => now(),
-            ]);
+    /**
+     * Spawns a background PHP queue worker to consume queued jobs immediately
+     * without blocking the HTTP request or current execution.
+     */
+    public static function triggerBackgroundQueueWorker(): void
+    {
+        try {
+            $php = escapeshellarg(PHP_BINARY);
+            $artisan = escapeshellarg(base_path('artisan'));
 
-            try {
-                if ($canSendLive) {
-                    Mail::raw($emailBody, function ($msg) use ($recipientEmail, $subject) {
-                        $msg->to($recipientEmail)->subject($subject);
-                    });
-                    $emailLog->update([
-                        'status' => 'sent',
-                        'sent_at' => now(),
-                        'error_message' => "Live emergency dispatch sent to {$recipientEmail}.",
-                    ]);
-                } else {
-                    $emailLog->update([
-                        'status' => 'sent',
-                        'sent_at' => now(),
-                        'error_message' => "Emergency ICU transfer requested by {$doctorName} to {$targetWard} (Simulated).",
-                    ]);
-                }
-            } catch (Throwable $e) {
-                Log::warning("ICU transfer email notification failed for {$recipientEmail}: " . $e->getMessage());
-                $emailLog->update([
-                    'status' => 'failed',
-                    'error_message' => $e->getMessage(),
-                ]);
+            if (str_starts_with(strtoupper(PHP_OS), 'WIN')) {
+                pclose(popen("start /B \"\" {$php} {$artisan} queue:work --once --stop-when-empty", "r"));
+            } else {
+                exec("{$php} {$artisan} queue:work --once --stop-when-empty > /dev/null 2>&1 &");
             }
+        } catch (Throwable $e) {
+            Log::warning("Could not spawn background queue worker: " . $e->getMessage());
         }
     }
 }

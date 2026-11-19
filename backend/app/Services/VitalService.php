@@ -15,7 +15,8 @@ class VitalService
 {
     public function __construct(
         protected AlertService $alertService,
-        protected AuditService $auditService
+        protected AuditService $auditService,
+        protected EmailNotificationService $emailService
     ) {}
 
     /**
@@ -51,7 +52,7 @@ class VitalService
      */
     public function record(array $data, User $actor, string $ip): array
     {
-        return DB::transaction(function () use ($data, $actor, $ip) {
+        $result = DB::transaction(function () use ($data, $actor, $ip) {
             $patient = Patient::findOrFail($data['patient_id']);
 
             // Validate that the admission belongs to this patient and is currently ACTIVE
@@ -201,6 +202,13 @@ class VitalService
                 'alerts' => $alerts,
             ];
         });
+
+        // Dispatch consolidated non-blocking alert notification AFTER successful DB transaction commit
+        if (!empty($result['alerts']) && $result['alerts']->isNotEmpty()) {
+            $this->emailService->sendBatchAlertNotification($result['alerts'], $result['vital_record']);
+        }
+
+        return $result;
     }
 
     /**

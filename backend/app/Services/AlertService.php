@@ -108,9 +108,6 @@ class AlertService
                 user: $actor
             );
 
-            // Send non-blocking email notification
-            $this->emailService->sendAlertNotification($alert);
-
             $generatedAlerts->push($alert);
         }
 

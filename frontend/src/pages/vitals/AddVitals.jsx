@@ -88,7 +88,10 @@ export default function AddVitals() {
       broadcastTelemetryUpdate();
       navigate(`/patients/${patientData.id}`);
     } catch (err) {
-      const msg = err.response?.data?.message || 'Failed to record vital signs.';
+      const msg =
+        err.response?.data?.message ||
+        (err.response?.data?.errors && Object.values(err.response.data.errors).flat()[0]) ||
+        (err.code === 'ECONNABORTED' ? 'Request timed out. Please try again.' : 'Failed to record vital signs.');
       toast.error(msg);
     } finally {
       setSaveLoading(false);
