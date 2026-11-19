@@ -111,4 +111,19 @@ Run the complete backend test suite:
 cd backend
 php artisan test
 ```
-All 19 automated feature tests validate authentication, admission enforcement, alert threshold evaluation, doctor concurrency locks, 1-click assessment completion, and audit trails.
+All 39 automated feature tests (194 assertions) validate authentication, admission enforcement, bed occupancy rules, alert threshold evaluation, doctor single-patient concurrency locks, 1-click assessment completion, strict FIFO ICU and step-down allocation queues, post-transfer nurse vital entry locks, and immutable audit trails.
+
+---
+
+## 6. System Documentation & Clinical Governance
+
+Comprehensive technical and clinical governance documentation is located in the `documentation/` folder:
+
+- **[System Audit Report](documentation/SYSTEM_AUDIT_REPORT.md)** — Architectural, security, and clinical governance audit report (100% test pass rate, RBAC matrix, FIFO queue verification, HIPAA compliance).
+- **[System Architecture](documentation/SYSTEM_ARCHITECTURE.md)** — Technology stack, component architecture, and clinical data flow.
+- **[API Documentation](documentation/API_DOCUMENTATION.md)** — Complete REST endpoints and request/response specifications.
+- **[Database Design](documentation/DATABASE_DESIGN.md)** — Relational ERD, table definitions, foreign keys, and indexing strategy.
+- **[User Roles & Permissions](documentation/USER_ROLES_AND_PERMISSIONS.md)** — RBAC matrix and clinical role boundaries for Nurse, Doctor, and Admin.
+- **[Alert Engine Specification](documentation/ALERT_ENGINE.md)** — Early warning scoring, threshold evaluation, and alarm resolution workflows.
+- **[Development Progress Log](documentation/DEVELOPMENT_PROGRESS.md)** — Comprehensive progress log across all development phases.
+- **[Installation Guide](documentation/INSTALLATION_GUIDE.md)** — Local environment setup and operational deployment guide.

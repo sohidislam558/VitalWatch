@@ -65,16 +65,31 @@
   - Resilient SMTP dispatching with fallback recording in `email_logs`.
 
 - [x] **PHASE 10 — Integration & Quality Assurance**
-  - Automated PHPUnit test suite: 17 tests, 54 assertions, 100% passing.
+  - Automated PHPUnit test suite: Core tests passing.
   - Frontend production build (`npm run build`) succeeded with 0 errors.
   - Live HTTP verification on backend (`http://localhost:8000`) and frontend (`http://localhost:5173`).
   - Resolved cross-origin CSRF token mismatch by configuring `validateCsrfTokens(except: ['api/*'])` for stateless Bearer token authorization in `bootstrap/app.php` and enabling credentialed CORS origins.
 
+- [x] **PHASE 11 — Acute Transfers & Priority Queue Enforcement**
+  - Emergency ICU transfer request and bed allocation workflow.
+  - Ward step-down de-escalation workflow with clinical stability prerequisites.
+  - Strict chronological FIFO priority queue enforcement on both backend (`AdmissionService`) and frontend (`SituationMonitor`).
+  - Physician single-patient bedside attendance concurrency control (`AlertService`).
+  - Post-ICU transfer nurse vitals lock until attending physician marks assessment done.
+
+- [x] **PHASE 12 — Enterprise Audit, Live Sync & Governance Audit**
+  - Enterprise clinical activity audit table with slide-over inspection drawer and KPI strip.
+  - Calendar date range filtering, quick presets (Today, Yesterday, Last 7 Days), and safe log deletion controls.
+  - Real-time cross-window synchronization via browser `BroadcastChannel` with `Live Real-Time Sync` indicators.
+  - Vital Trend Logs with patient name/code identification and seamless patient chart deep links.
+  - Comprehensive architectural and clinical governance audit compiled in `SYSTEM_AUDIT_REPORT.md`.
+
 ---
 
 ### Verification Summary
-- **Backend Tests:** `php artisan test` &rarr; 17 passed, 0 failed.
-- **Frontend Build:** `npm run build` &rarr; 0 errors, production bundle compiled.
+- **Backend Tests:** `php artisan test` &rarr; **39 passed, 0 failed (194 assertions, 100% pass rate)**.
+- **Frontend Build:** `npm run build` &rarr; **0 errors, production bundle compiled cleanly in under 700ms**.
+- **Audit Report:** Documented in [SYSTEM_AUDIT_REPORT.md](SYSTEM_AUDIT_REPORT.md).
 - **Live Services:**
   - Laravel API running on `http://127.0.0.1:8000`.
   - React Vite UI running on `http://localhost:5173`.
